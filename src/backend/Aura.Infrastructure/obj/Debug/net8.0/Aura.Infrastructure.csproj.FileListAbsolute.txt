@@ -17,3 +17,23 @@ D:\vis\do an\AURA-System\src\backend\Aura.Infrastructure\obj\Debug\net8.0\refint
 D:\vis\do an\AURA-System\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.pdb
 D:\vis\do an\AURA-System\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.genruntimeconfig.cache
 D:\vis\do an\AURA-System\src\backend\Aura.Infrastructure\obj\Debug\net8.0\ref\Aura.Infrastructure.dll
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Infrastructure.deps.json
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Infrastructure.runtimeconfig.json
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Infrastructure.dll
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Infrastructure.pdb
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Application.dll
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Domain.dll
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Application.pdb
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\bin\Debug\net8.0\Aura.Domain.pdb
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.csproj.AssemblyReference.cache
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.AssemblyInfoInputs.cache
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.AssemblyInfo.cs
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.csproj.CoreCompileInputs.cache
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.sourcelink.json
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Inf.CD36263C.Up2Date
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.dll
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\refint\Aura.Infrastructure.dll
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.pdb
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\Aura.Infrastructure.genruntimeconfig.cache
+D:\HTGIACMAC\src\backend\Aura.Infrastructure\obj\Debug\net8.0\ref\Aura.Infrastructure.dll

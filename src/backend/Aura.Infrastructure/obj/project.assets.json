@@ -5373,19 +5373,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Admin\\.nuget\\packages\\": {}
+    "C:\\Users\\Minh Tan\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\vis\\do an\\AURA-System\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj",
+      "projectUniqueName": "D:\\HTGIACMAC\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj",
       "projectName": "Aura.Infrastructure",
-      "projectPath": "D:\\vis\\do an\\AURA-System\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj",
-      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-      "outputPath": "D:\\vis\\do an\\AURA-System\\src\\backend\\Aura.Infrastructure\\obj\\",
+      "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj",
+      "packagesPath": "C:\\Users\\Minh Tan\\.nuget\\packages\\",
+      "outputPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Infrastructure\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\Minh Tan\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -5397,11 +5397,11 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "D:\\vis\\do an\\AURA-System\\src\\backend\\Aura.Application\\Aura.Application.csproj": {
-              "projectPath": "D:\\vis\\do an\\AURA-System\\src\\backend\\Aura.Application\\Aura.Application.csproj"
+            "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj": {
+              "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj"
             },
-            "D:\\vis\\do an\\AURA-System\\src\\backend\\Aura.Domain\\Aura.Domain.csproj": {
-              "projectPath": "D:\\vis\\do an\\AURA-System\\src\\backend\\Aura.Domain\\Aura.Domain.csproj"
+            "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj": {
+              "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj"
             }
           }
         }

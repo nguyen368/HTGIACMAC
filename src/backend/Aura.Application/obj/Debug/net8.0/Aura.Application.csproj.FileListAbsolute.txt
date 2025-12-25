@@ -13,3 +13,19 @@ D:\vis\do an\AURA-System\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Appl
 D:\vis\do an\AURA-System\src\backend\Aura.Application\obj\Debug\net8.0\refint\Aura.Application.dll
 D:\vis\do an\AURA-System\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.pdb
 D:\vis\do an\AURA-System\src\backend\Aura.Application\obj\Debug\net8.0\ref\Aura.Application.dll
+D:\HTGIACMAC\src\backend\Aura.Application\bin\Debug\net8.0\Aura.Application.deps.json
+D:\HTGIACMAC\src\backend\Aura.Application\bin\Debug\net8.0\Aura.Application.dll
+D:\HTGIACMAC\src\backend\Aura.Application\bin\Debug\net8.0\Aura.Application.pdb
+D:\HTGIACMAC\src\backend\Aura.Application\bin\Debug\net8.0\Aura.Domain.dll
+D:\HTGIACMAC\src\backend\Aura.Application\bin\Debug\net8.0\Aura.Domain.pdb
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.csproj.AssemblyReference.cache
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.GeneratedMSBuildEditorConfig.editorconfig
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.AssemblyInfoInputs.cache
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.AssemblyInfo.cs
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.csproj.CoreCompileInputs.cache
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.sourcelink.json
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.App.C1A6E793.Up2Date
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.dll
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\refint\Aura.Application.dll
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\Aura.Application.pdb
+D:\HTGIACMAC\src\backend\Aura.Application\obj\Debug\net8.0\ref\Aura.Application.dll
