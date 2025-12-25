@@ -1,0 +1,11 @@
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\bin\Debug\net8.0\Aura.Domain.deps.json
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\bin\Debug\net8.0\Aura.Domain.dll
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\bin\Debug\net8.0\Aura.Domain.pdb
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\Aura.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\Aura.Domain.AssemblyInfoInputs.cache
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\Aura.Domain.AssemblyInfo.cs
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\Aura.Domain.csproj.CoreCompileInputs.cache
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\Aura.Domain.dll
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\refint\Aura.Domain.dll
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\Aura.Domain.pdb
+D:\vis\do an\AURA-System\src\backend\Aura.Domain\obj\Debug\net8.0\ref\Aura.Domain.dll
