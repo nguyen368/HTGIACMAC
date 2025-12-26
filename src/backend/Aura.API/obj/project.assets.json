@@ -5826,19 +5826,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Minh Tan\\.nuget\\packages\\": {}
+    "C:\\Users\\Admin\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\HTGIACMAC\\src\\backend\\Aura.API\\Aura.API.csproj",
+      "projectUniqueName": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.API\\Aura.API.csproj",
       "projectName": "Aura.API",
-      "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.API\\Aura.API.csproj",
-      "packagesPath": "C:\\Users\\Minh Tan\\.nuget\\packages\\",
-      "outputPath": "D:\\HTGIACMAC\\src\\backend\\Aura.API\\obj\\",
+      "projectPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.API\\Aura.API.csproj",
+      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
+      "outputPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.API\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Minh Tan\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -5850,11 +5850,11 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj": {
-              "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj"
+            "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj": {
+              "projectPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj"
             },
-            "D:\\HTGIACMAC\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj": {
-              "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj"
+            "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj": {
+              "projectPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Infrastructure\\Aura.Infrastructure.csproj"
             }
           }
         }

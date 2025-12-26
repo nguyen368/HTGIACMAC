@@ -8,19 +8,19 @@
     "net8.0": []
   },
   "packageFolders": {
-    "C:\\Users\\Minh Tan\\.nuget\\packages\\": {}
+    "C:\\Users\\Admin\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
+      "projectUniqueName": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
       "projectName": "Aura.Domain",
-      "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
-      "packagesPath": "C:\\Users\\Minh Tan\\.nuget\\packages\\",
-      "outputPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\obj\\",
+      "projectPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
+      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
+      "outputPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Minh Tan\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
