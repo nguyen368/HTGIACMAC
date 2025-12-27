@@ -1,0 +1,13 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+/* BẮT BUỘC: Set chiều cao 100% để giao diện bung toàn màn hình */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Chặn thanh cuộn thừa của trình duyệt */
+  background-color: #f0f2f5;
+}

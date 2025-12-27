@@ -1,33 +1,39 @@
 {
   "format": 1,
   "restore": {
-    "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj": {}
+    "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj": {}
   },
   "projects": {
-    "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj": {
+    "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj",
+        "projectUniqueName": "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj",
         "projectName": "Aura.Application",
-        "projectPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj",
+        "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\Aura.Application.csproj",
         "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-        "outputPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Application\\obj\\",
+        "outputPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Application\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
         ],
         "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj": {
-                "projectPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj"
+              "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj": {
+                "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj"
               }
             }
           }
@@ -41,7 +47,8 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "direct"
-        }
+        },
+        "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
         "net8.0": {
@@ -62,26 +69,32 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.300-preview.0.25177.5/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj": {
+    "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
+        "projectUniqueName": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
         "projectName": "Aura.Domain",
-        "projectPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
+        "projectPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\Aura.Domain.csproj",
         "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-        "outputPath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.Domain\\obj\\",
+        "outputPath": "D:\\HTGIACMAC\\src\\backend\\Aura.Domain\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
         ],
         "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -99,7 +112,8 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "direct"
-        }
+        },
+        "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
         "net8.0": {
@@ -120,7 +134,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.300-preview.0.25177.5/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

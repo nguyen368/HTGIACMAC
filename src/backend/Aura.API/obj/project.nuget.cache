@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "FmzRn465EEM=",
+  "dgSpecHash": "8tjb5xkdJ+Q=",
   "success": true,
-  "projectFilePath": "D:\\vis\\do an\\HTGIACMAC\\src\\backend\\Aura.API\\Aura.API.csproj",
+  "projectFilePath": "D:\\HTGIACMAC\\src\\backend\\Aura.API\\Aura.API.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Admin\\.nuget\\packages\\cloudinarydotnet\\1.27.9\\cloudinarydotnet.1.27.9.nupkg.sha512",
     "C:\\Users\\Admin\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
