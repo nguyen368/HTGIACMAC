@@ -1,218 +1,227 @@
 import React, { useState } from 'react';
+import { Upload, Button, Card, Typography, message, Row, Col, Steps, Alert, Progress, Spin } from 'antd';
 import { 
-  Upload, 
-  Button, 
-  Card, 
-  Typography, 
-  List, 
-  Image, 
-  Progress, 
-  message, 
-  Space, 
-  Alert 
-} from 'antd';
-import { 
-  InboxOutlined, 
-  DeleteOutlined, 
   CloudUploadOutlined, 
-  ExperimentOutlined 
+  FileImageOutlined, 
+  MedicineBoxOutlined, 
+  ScanOutlined, 
+  SafetyCertificateOutlined 
 } from '@ant-design/icons';
-import type { UploadFile, UploadProps } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import type { UploadProps } from 'antd';
 
-const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
+const { Title, Text } = Typography;
 
 const ImageUpload: React.FC = () => {
-  const [fileList, setFileList] = useState<UploadFile[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const navigate = useNavigate();
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'analyzing' | 'success'>('idle');
+  const [progress, setProgress] = useState(0);
 
-  // Cấu hình cho component Upload của Ant Design
-  const uploadProps: UploadProps = {
-    onRemove: (file) => {
-      const index = fileList.indexOf(file);
-      const newFileList = fileList.slice();
-      newFileList.splice(index, 1);
-      setFileList(newFileList);
-    },
-    beforeUpload: (file) => {
-      // Kiểm tra định dạng ảnh (JPG/PNG) và kích thước (<5MB)
+  const customUploadProps: UploadProps = {
+    name: 'file',
+    multiple: false,
+    showUploadList: false,
+    action: 'https://run.mocky.io/v3/435ba68c-13a8-44d2-8589-2948718f8b4b', // Mock API
+    beforeUpload(file) {
       const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
       if (!isJpgOrPng) {
-        message.error('Bạn chỉ có thể tải lên file định dạng JPG hoặc PNG!');
-        return Upload.LIST_IGNORE;
+        message.error('Chỉ hỗ trợ định dạng JPG/PNG!');
       }
-      const isLt5M = file.size / 1024 / 1024 < 5;
-      if (!isLt5M) {
-        message.error('Ảnh phải nhỏ hơn 5MB!');
-        return Upload.LIST_IGNORE;
-      }
-
-      setFileList((prev) => [...prev, file]);
-      return false; // Ngăn không cho upload tự động ngay lập tức (để chờ nút Analyze)
+      return isJpgOrPng;
     },
-    fileList,
-    multiple: true, // [FR-2] Cho phép upload nhiều ảnh
-    listType: 'picture',
-    maxCount: 100, // [NFR-2] Hỗ trợ xử lý số lượng lớn
-  };
-
-  // Hàm xử lý khi nhấn nút "Bắt đầu Phân tích"
-  const handleAnalyze = () => {
-    if (fileList.length === 0) {
-      message.warning('Vui lòng chọn ít nhất một ảnh võng mạc để phân tích.');
-      return;
-    }
-
-    setUploading(true);
-    setAnalysisProgress(0);
-
-    // Giả lập quá trình upload và phân tích (Mocking API call)
-    // Thực tế bạn sẽ gọi API đến UploadController.cs ở đây
-    const formData = new FormData();
-    fileList.forEach((file) => {
-      formData.append('files', file as any);
-    });
-
-    // Giả lập tiến trình [NFR-1]: 10-20s
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setAnalysisProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        setUploading(false);
-        message.success('Phân tích hoàn tất! Đang chuyển hướng đến trang kết quả...');
-        // Tại đây sẽ chuyển hướng (navigate) sang trang DiagnosisViewer
+    onChange(info) {
+      const { status } = info.file;
+      
+      if (status === 'uploading') {
+        setUploadState('uploading');
+        // Giả lập tiến trình upload
+        const interval = setInterval(() => {
+            setProgress((prev) => {
+                if (prev >= 90) {
+                    clearInterval(interval);
+                    return 90;
+                }
+                return prev + 10;
+            });
+        }, 100);
       }
-    }, 1500); 
+      
+      if (status === 'done') {
+        setProgress(100);
+        setUploadState('analyzing');
+        message.success(`Tải ảnh lên thành công. Đang phân tích...`);
+        
+        // Giả lập thời gian AI phân tích (2 giây)
+        setTimeout(() => {
+            setUploadState('success');
+            setTimeout(() => navigate('/diagnosis/BN-2024-0892'), 500); 
+        }, 2000);
+
+      } else if (status === 'error') {
+        setUploadState('idle');
+        message.error(`Tải ảnh thất bại.`);
+      }
+    },
   };
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        
-        {/* Phần Header */}
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <Title level={2} style={{ color: '#1890ff' }}>
-            <ExperimentOutlined /> Sàng Lọc Sức Khỏe Mạch Máu Võng Mạc
-          </Title>
-          <Paragraph>
-            Tải lên hình ảnh chụp đáy mắt (Fundus) hoặc OCT để hệ thống AI (AURA) phân tích và phát hiện sớm các rủi ro bệnh lý.
-          </Paragraph>
-        </div>
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
+      
+      {/* Header Section */}
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <Title level={2} style={{ color: '#003a8c', marginBottom: 8 }}>
+          Tải Lên Hình Ảnh Giác Mạc
+        </Title>
+        <Text type="secondary" style={{ fontSize: 16 }}>
+          Hệ thống AI sẽ phân tích hình ảnh đèn khe để chẩn đoán bệnh lý
+        </Text>
+      </div>
 
-        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-          {/* Khu vực Upload (Bên trái) */}
-          <Card title="Tải ảnh lên" bordered={false} style={{ flex: 1, minWidth: '300px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <Dragger {...uploadProps} style={{ padding: '40px 0' }}>
-              <p className="ant-upload-drag-icon">
-                <InboxOutlined style={{ color: '#1890ff', fontSize: '48px' }} />
-              </p>
-              <p className="ant-upload-text">Nhấp hoặc kéo thả ảnh vào khu vực này</p>
-              <p className="ant-upload-hint">
-                Hỗ trợ tải lên đơn lẻ hoặc hàng loạt. Định dạng: .JPG, .PNG
-              </p>
-            </Dragger>
-            
-            <div style={{ marginTop: '20px' }}>
-              <Alert 
-                message="Lưu ý quan trọng" 
-                description="Đảm bảo ảnh chụp rõ nét, không bị lóa sáng để AI có thể đưa ra kết quả chính xác nhất. Tất cả dữ liệu bệnh nhân sẽ được mã hóa."
-                type="info" 
-                showIcon 
-              />
+      <Row gutter={[32, 32]} align="stretch">
+        
+        {/* Cột Trái: Hướng dẫn & Quy trình */}
+        <Col xs={24} lg={9}>
+          <Card 
+            title={<span style={{ color: '#0050b3' }}><SafetyCertificateOutlined /> Quy Trình Tiêu Chuẩn</span>}
+            bordered={false}
+            style={{ height: '100%', boxShadow: '0 6px 16px rgba(0,0,0,0.06)', borderRadius: 16 }}
+          >
+            <Steps
+              direction="vertical"
+              current={uploadState === 'idle' ? 0 : uploadState === 'uploading' ? 1 : 2}
+              items={[
+                {
+                  title: 'Chọn ảnh',
+                  description: 'Ảnh chụp đèn khe rõ nét (JPG/PNG).',
+                  icon: <FileImageOutlined />,
+                },
+                {
+                  title: 'Tải lên & Mã hóa',
+                  description: 'Dữ liệu được bảo mật chuẩn HIPAA.',
+                  icon: <CloudUploadOutlined />,
+                },
+                {
+                  title: 'AI Phân tích',
+                  description: 'Deep Learning chẩn đoán tổn thương.',
+                  icon: <ScanOutlined />,
+                },
+                {
+                  title: 'Kết quả',
+                  description: 'Hiển thị bản đồ nhiệt & phác đồ.',
+                  icon: <MedicineBoxOutlined />,
+                },
+              ]}
+            />
+            <div style={{ marginTop: 24 }}>
+                <Alert 
+                    message="Lưu ý chất lượng ảnh" 
+                    description="Tránh ảnh bị mờ hoặc lóa sáng quá mức để đảm bảo độ chính xác >95%."
+                    type="info" 
+                    showIcon 
+                    style={{ background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 8 }}
+                />
             </div>
           </Card>
+        </Col>
 
-          {/* Khu vực Danh sách & Xem trước (Bên phải) */}
+        {/* Cột Phải: Khu vực Upload */}
+        <Col xs={24} lg={15}>
           <Card 
-            title={`Danh sách ảnh (${fileList.length})`} 
-            bordered={false} 
-            style={{ flex: 1, minWidth: '300px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-            extra={
-               fileList.length > 0 && (
-                <Button 
-                    type="text" 
-                    danger 
-                    icon={<DeleteOutlined />} 
-                    onClick={() => setFileList([])}
-                    disabled={uploading}
-                >
-                    Xóa tất cả
-                </Button>
-               )
-            }
+            bordered={false}
+            style={{ 
+                height: '100%', 
+                boxShadow: '0 6px 16px rgba(0,0,0,0.06)', 
+                borderRadius: 16,
+                display: 'flex',
+                flexDirection: 'column'
+            }}
+            bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
           >
-            {fileList.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-                    Chưa có ảnh nào được chọn.
+            {uploadState === 'analyzing' ? (
+                // Giao diện khi đang phân tích
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                    <Spin size="large" />
+                    <Title level={4} style={{ color: '#0050b3', marginTop: 20 }}>Đang phân tích hình ảnh...</Title>
+                    <Text type="secondary">AI đang quét vùng tổn thương trên giác mạc</Text>
+                </div>
+            ) : uploadState === 'uploading' ? (
+                // Giao diện khi đang upload
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                    <Title level={4} style={{ color: '#0050b3' }}>Đang tải lên máy chủ...</Title>
+                    <Progress 
+                        percent={progress} 
+                        status="active" 
+                        strokeColor={{ from: '#108ee9', to: '#87d068' }} 
+                        strokeWidth={12}
+                    />
                 </div>
             ) : (
-                <List
-                    itemLayout="horizontal"
-                    dataSource={fileList}
-                    renderItem={(file) => (
-                    <List.Item
-                        actions={[
-                            <Button 
-                                type="text" 
-                                icon={<DeleteOutlined />} 
-                                danger 
-                                onClick={() => {
-                                    const index = fileList.indexOf(file);
-                                    const newFileList = fileList.slice();
-                                    newFileList.splice(index, 1);
-                                    setFileList(newFileList);
-                                }}
-                                disabled={uploading}
-                            />
-                        ]}
-                    >
-                        <List.Item.Meta
-                        avatar={
-                            <Image
-                                src={file.originFileObj ? URL.createObjectURL(file.originFileObj as Blob) : ''}
-                                alt={file.name}
-                                width={60}
-                                height={60}
-                                style={{ objectFit: 'cover', borderRadius: '4px' }}
-                            />
-                        }
-                        title={<Text strong>{file.name}</Text>}
-                        description={<Text type="secondary">{(file.size ? (file.size / 1024).toFixed(2) : 0)} KB</Text>}
-                        />
-                    </List.Item>
-                    )}
-                    style={{ maxHeight: '400px', overflowY: 'auto' }}
-                />
-            )}
-
-            {/* Nút hành động */}
-            <div style={{ marginTop: '24px' }}>
-                {uploading && (
-                    <div style={{ marginBottom: '16px' }}>
-                        <Text>Đang phân tích...</Text>
-                        <Progress percent={analysisProgress} status="active" />
-                    </div>
-                )}
-                
-                <Button 
-                    type="primary" 
-                    icon={<CloudUploadOutlined />} 
-                    size="large" 
-                    block 
-                    onClick={handleAnalyze}
-                    loading={uploading}
-                    disabled={fileList.length === 0}
-                    style={{ height: '50px', fontSize: '16px', fontWeight: 600 }}
+                // Giao diện mặc định (Chưa upload)
+                <Dragger 
+                    {...customUploadProps} 
+                    style={{ 
+                        padding: '40px 20px', 
+                        background: '#f9fcff', 
+                        border: '2px dashed #40a9ff', 
+                        borderRadius: 16,
+                        transition: 'all 0.3s ease'
+                    }}
+                    className="custom-dragger"
                 >
-                    {uploading ? 'Đang xử lý AI...' : 'Bắt đầu Phân tích'}
-                </Button>
-            </div>
+                    <p className="ant-upload-drag-icon">
+                        <CloudUploadOutlined style={{ color: '#1890ff', fontSize: 64 }} />
+                    </p>
+                    <Title level={4} style={{ color: '#003a8c', marginBottom: 10 }}>
+                        Kéo thả hình ảnh vào đây
+                    </Title>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 20 }}>
+                        Hỗ trợ tải lên nhanh hoặc nhấn nút bên dưới
+                    </Text>
+                    <Button 
+                        type="primary" 
+                        size="large" 
+                        shape="round"
+                        icon={<CloudUploadOutlined />} 
+                        style={{ height: 45, paddingLeft: 30, paddingRight: 30, background: '#0050b3' }}
+                    >
+                        Chọn Ảnh Từ Máy Tính
+                    </Button>
+                </Dragger>
+            )}
+            
+            {/* Ảnh mẫu test nhanh */}
+            {uploadState === 'idle' && (
+                <div style={{ marginTop: 30, borderTop: '1px solid #f0f0f0', paddingTop: 20 }}>
+                    <Text type="secondary" style={{ fontSize: 13 }}>Thử nhanh với dữ liệu mẫu:</Text>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                        {[1, 2, 3].map(i => (
+                            <div 
+                                key={i}
+                                onClick={() => message.info('Tính năng đang phát triển')}
+                                style={{ 
+                                    width: 80, 
+                                    height: 60, 
+                                    background: '#e6f7ff', 
+                                    borderRadius: 8, 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    border: '1px solid #bae7ff',
+                                    color: '#0050b3',
+                                    fontWeight: 500
+                                }}
+                            >
+                                Mẫu {i}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
           </Card>
-        </div>
-      </Space>
+        </Col>
+      </Row>
     </div>
   );
 };
