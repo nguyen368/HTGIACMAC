@@ -1,9 +1,10 @@
 // Định nghĩa các đối tượng dữ liệu theo chuẩn OOP
 export interface AIResult {
-  id: string;
-  riskScore: number;       // Điểm rủi ro từ 0.0 đến 1.0
-  heatmapUrl: string;      // Đường dẫn ảnh bản đồ nhiệt
-  detectedRegion: string;  // Vùng phát hiện bất thường
+  riskLevel: 'High' | 'Medium' | 'Low' | 'Normal'; // Chỉ chấp nhận 4 giá trị này
+  confidence: number;     // Độ tin cậy (%)
+  findings: string[];     // Danh sách các phát hiện bệnh lý
+  heatmapUrl?: string;    // Link ảnh heatmap (không bắt buộc)
+  annotatedUrl?: string;  // Link ảnh khoanh vùng (không bắt buộc)
 }
 
 export interface Patient {
@@ -11,12 +12,7 @@ export interface Patient {
   name: string;
   age: number;
   gender: string;
-  history: string;         // Tiền sử bệnh án
-}
-
-// Định nghĩa Input cho Component
-export interface DiagnosisProps {
-  patient: Patient;
-  aiResult: AIResult;
-  originalImageUrl: string;
+  history?: string;       // Dấu ? nghĩa là có thể không có
+  lastExam?: string;      // Dòng này sửa lỗi 'lastExam' màu đỏ
+  phoneNumber?: string;
 }
