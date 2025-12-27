@@ -1,166 +1,193 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
-  Layout, Menu, Breadcrumb, Card, Row, Col, 
-  Switch, Radio, Input, Button, Modal, 
-  message, Space, Descriptions, Tag, Empty, 
-  Typography, Avatar, Tooltip 
+  Card, Row, Col, Typography, Button, Descriptions, 
+  Tag, Divider, Progress, Tabs, Timeline, Statistic, Alert, Space 
 } from 'antd';
 import { 
-  EyeOutlined, SaveOutlined, UserOutlined, 
-  HomeOutlined, WarningOutlined, CheckCircleOutlined,
-  ZoomInOutlined, ZoomOutOutlined, UngroupOutlined,
-  MenuUnfoldOutlined, MenuFoldOutlined, MedicineBoxOutlined
+  ReloadOutlined, 
+  FilePdfOutlined, 
+  ShareAltOutlined,
+  MedicineBoxOutlined,
+  CheckCircleOutlined,
+  WarningOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
-import type { DiagnosisProps } from '../types';
+import { useParams, useNavigate } from 'react-router-dom';
 
-const { Header, Content, Sider } = Layout;
-const { Text, Title } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
-const DiagnosisViewer: React.FC<DiagnosisProps> = ({ patient, aiResult, originalImageUrl }) => {
-  // --- STATE ---
-  const [collapsed, setCollapsed] = useState(false);
-  const [showHeatmap, setShowHeatmap] = useState(true);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [finalRisk, setFinalRisk] = useState('High');
-  const [loading, setLoading] = useState(false);
-  const [imgError, setImgError] = useState(false);
+// Bạn có thể định nghĩa Interface ở đây hoặc file types.ts
+interface DiagnosisData {
+    patient: {
+        id: string;
+        name: string;
+        dob: string;
+        gender: string;
+        address: string;
+        history: string;
+    };
+    aiResult: {
+        date: string;
+        prediction: string;
+        confidence: number;
+        severity: string;
+        description: string;
+    };
+}
 
-  // --- LOGIC ---
-  const handleZoom = (type: 'in' | 'out') => {
-    if (type === 'in' && zoomLevel < 3) setZoomLevel(prev => prev + 0.2);
-    if (type === 'out' && zoomLevel > 0.6) setZoomLevel(prev => prev - 0.2);
+const DiagnosisViewer: React.FC = () => {
+  const { id } = useParams(); // Lấy ID từ URL (ví dụ: /diagnosis/123)
+  const navigate = useNavigate();
+
+  // Dữ liệu giả lập (Hardcode để không bị lỗi prop khi gọi từ App.tsx)
+  const data: DiagnosisData = {
+    patient: {
+      id: id || "BN-2024-001",
+      name: "Nguyễn Văn An",
+      dob: "15/08/1985",
+      gender: "Nam",
+      address: "Hà Nội",
+      history: "Mắt phải mờ dần 2 tuần nay, có tiền sử chấn thương nhẹ."
+    },
+    aiResult: {
+      date: new Date().toLocaleString('vi-VN'),
+      prediction: "Viêm Giác Mạc (Keratitis)",
+      confidence: 94.5,
+      severity: "Mức độ trung bình",
+      description: "Phát hiện vùng tổn thương nhu mô tại vị trí trung tâm, kích thước khoảng 2.5mm. Có dấu hiệu thâm nhiễm."
+    }
   };
 
-  const handleVerify = () => {
-    Modal.confirm({
-      title: 'Ký duyệt hồ sơ bệnh án (EMR)',
-      icon: <CheckCircleOutlined style={{ color: '#52c41a' }} />,
-      content: 'Xác nhận lưu kết quả chẩn đoán vào hệ thống?',
-      onOk() {
-        setLoading(true);
-        setTimeout(() => {
-          setLoading(false);
-          message.success('Đã lưu thành công!');
-        }, 1000);
-      }
-    });
+  // Hàm chọn màu sắc dựa trên độ tin cậy
+  const getConfidenceColor = (percent: number) => {
+    if (percent >= 80) return '#52c41a';
+    if (percent >= 50) return '#faad14';
+    return '#f5222d';
   };
 
   return (
-    // QUAN TRỌNG: style={{ height: '100vh' }} để layout luôn full màn hình
-    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+    <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
       
-      {/* 1. SIDEBAR TRÁI */}
-      <Sider trigger={null} collapsible collapsed={collapsed} width={240} style={{ background: '#001529' }}>
-        <div style={{ height: 64, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: collapsed ? 12 : 18, transition: 'all 0.2s' }}>
-          {collapsed ? 'AURA' : 'AURA HOSPITAL'}
+      {/* Header Page */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+           <Space align="center" size="middle">
+             <Button onClick={() => navigate('/upload')} icon={<ReloadOutlined />}>Chẩn đoán lại</Button>
+             <Title level={3} style={{ margin: 0, color: '#003a8c' }}>Kết Quả Chẩn Đoán AI</Title>
+           </Space>
+           <div style={{ marginTop: 8, color: '#666' }}>
+             Hồ sơ: <Tag color="blue">{data.patient.id}</Tag> | Thời gian: {data.aiResult.date}
+           </div>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          defaultSelectedKeys={['2']}
-          items={[
-            { key: '1', icon: <HomeOutlined />, label: 'Dashboard' },
-            { key: '2', icon: <EyeOutlined />, label: 'Chẩn đoán AI' },
-            { key: '3', icon: <UserOutlined />, label: 'Bệnh nhân' },
-          ]}
-        />
-      </Sider>
+        <Space>
+          <Button icon={<ShareAltOutlined />}>Hội chẩn</Button>
+          <Button type="primary" icon={<FilePdfOutlined />} style={{ background: '#0050b3' }}>Xuất PDF</Button>
+        </Space>
+      </div>
 
-      <Layout>
-        {/* 2. HEADER */}
-        <Header style={{ background: '#fff', padding: '0 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
-          <Space>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              className: 'trigger',
-              onClick: () => setCollapsed(!collapsed),
-              style: { fontSize: 18, cursor: 'pointer' }
-            })}
-            <Breadcrumb items={[{ title: 'Hệ thống' }, { title: 'Chuyên khoa Mắt' }, { title: 'Xử lý ảnh' }]} />
-          </Space>
-          <Space>
-             <Tag color="cyan">Ver 2.0</Tag>
-             <Avatar style={{ backgroundColor: '#1890ff' }} icon={<UserOutlined />} />
-             <Text strong>BS. Trưởng Ca</Text>
-          </Space>
-        </Header>
-
-        {/* 3. CONTENT CHÍNH */}
-        <Content style={{ margin: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          
-          {/* Thông tin bệnh nhân */}
-          <Card size="small" style={{ marginBottom: 12, borderLeft: '4px solid #1890ff' }}>
-             <Descriptions size="small" column={4}>
-                <Descriptions.Item label="Họ tên"><b>{patient.name}</b></Descriptions.Item>
-                <Descriptions.Item label="Mã BN"><Tag>{patient.id}</Tag></Descriptions.Item>
-                <Descriptions.Item label="Tuổi">{patient.age}</Descriptions.Item>
-                <Descriptions.Item label="Tiền sử">{patient.history}</Descriptions.Item>
-             </Descriptions>
+      <Row gutter={[24, 24]}>
+        
+        {/* Cột Trái: Hình ảnh */}
+        <Col xs={24} lg={14} xl={15}>
+          <Card bordered={false} className="shadow-card" style={{ borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Tabs 
+              defaultActiveKey="1" 
+              items={[
+                {
+                  key: '1',
+                  label: <span><EyeOutlined /> Phân Tích AI</span>,
+                  children: (
+                    <div style={{ padding: '10px' }}>
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <div style={{ textAlign: 'center' }}>
+                             <Text strong>Ảnh Gốc</Text>
+                             <img src="/eye.jpg" alt="Original" style={{ width: '100%', marginTop: 10, borderRadius: 8, border: '1px solid #eee' }} />
+                          </div>
+                        </Col>
+                        <Col span={12}>
+                          <div style={{ textAlign: 'center' }}>
+                             <Text strong>Bản Đồ Nhiệt (Heatmap)</Text>
+                             <img src="/eye.jpg" alt="Heatmap" style={{ width: '100%', marginTop: 10, borderRadius: 8, border: '1px solid #eee', filter: 'hue-rotate(45deg) contrast(1.2)' }} />
+                          </div>
+                        </Col>
+                      </Row>
+                      <Divider />
+                      <Alert 
+                        message="Giải thích vùng tổn thương"
+                        description={data.aiResult.description}
+                        type="warning"
+                        showIcon
+                        icon={<WarningOutlined />}
+                        style={{ background: '#fffbe6', borderColor: '#ffe58f' }}
+                      />
+                    </div>
+                  )
+                }
+              ]}
+            />
           </Card>
 
-          {/* Khu vực làm việc chia 2 cột */}
-          <div style={{ flex: 1, display: 'flex', gap: '16px', overflow: 'hidden' }}>
-             
-             {/* CỘT ẢNH (Image Viewer) */}
-             <div style={{ flex: 3, display: 'flex', flexDirection: 'column', background: '#262626', borderRadius: 8, overflow: 'hidden' }}>
-                {/* Toolbar */}
-                <div style={{ padding: '8px 16px', background: '#141414', display: 'flex', justifyContent: 'space-between' }}>
-                   <Space>
-                      <Text style={{ color: '#fff' }}>Lớp phủ AI:</Text>
-                      <Switch checked={showHeatmap} onChange={setShowHeatmap} size="small" />
-                   </Space>
-                   <Space>
-                      <Button type="text" icon={<ZoomInOutlined style={{ color: '#fff' }} />} onClick={() => handleZoom('in')} />
-                      <Button type="text" icon={<ZoomOutOutlined style={{ color: '#fff' }} />} onClick={() => handleZoom('out')} />
-                      <Button type="text" icon={<UngroupOutlined style={{ color: '#fff' }} />} onClick={() => setZoomLevel(1)} />
-                   </Space>
-                </div>
+          <Card title="Gợi Ý Phác Đồ Điều Trị (Tham khảo)" style={{ marginTop: 24, borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} bordered={false}>
+             <Timeline
+                items={[
+                  { color: 'red', children: 'Xét nghiệm vi sinh xác định tác nhân.' },
+                  { color: 'blue', children: 'Sử dụng kháng sinh/kháng nấm tại chỗ liều tấn công.' },
+                  { color: 'green', children: 'Theo dõi đáp ứng lâm sàng sau 24h.' },
+                  { color: 'gray', children: 'Tái khám và chỉnh liều.' },
+                ]}
+              />
+          </Card>
+        </Col>
 
-                {/* Vùng hiển thị ảnh */}
-                <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000' }}>
-                   {!imgError ? (
-                     <div style={{ transform: `scale(${zoomLevel})`, transition: 'transform 0.3s', position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <img src={originalImageUrl} onError={() => setImgError(true)} style={{ maxHeight: '95%', maxWidth: '95%', objectFit: 'contain', position: 'absolute' }} />
-                        {showHeatmap && <img src={aiResult.heatmapUrl} style={{ maxHeight: '95%', maxWidth: '95%', objectFit: 'contain', position: 'absolute', opacity: 0.6, mixBlendMode: 'screen' }} />}
-                     </div>
-                   ) : <Empty description={<span style={{color: '#fff'}}>Không tải được ảnh</span>} />}
+        {/* Cột Phải: Kết luận và Thông tin bệnh nhân */}
+        <Col xs={24} lg={10} xl={9}>
+          
+          {/* Card Kết Quả */}
+          <Card style={{ marginBottom: 24, background: '#f6ffed', borderColor: '#b7eb8f', borderRadius: 12 }}>
+             <div style={{ textAlign: 'center' }}>
+                <Text type="secondary">AI dự đoán bệnh lý:</Text>
+                <Title level={2} style={{ color: '#d4380d', margin: '10px 0' }}>
+                  {data.aiResult.prediction}
+                </Title>
+                <Divider style={{ margin: '12px 0' }} />
+                <Row gutter={16}>
+                    <Col span={12}>
+                        <Statistic title="Độ tin cậy" value={data.aiResult.confidence} suffix="%" valueStyle={{ color: '#389e0d', fontWeight: 'bold' }} />
+                    </Col>
+                    <Col span={12}>
+                        <Statistic title="Mức độ" value={data.aiResult.severity} valueStyle={{ fontSize: 16 }} />
+                    </Col>
+                </Row>
+                <div style={{ marginTop: 15 }}>
+                    <Progress percent={data.aiResult.confidence} strokeColor={getConfidenceColor(data.aiResult.confidence)} showInfo={false} />
                 </div>
              </div>
+          </Card>
 
-             {/* CỘT FORM (Clinical Decision) */}
-             <div style={{ flex: 2, background: '#fff', borderRadius: 8, padding: '16px', border: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-                <Title level={5}><MedicineBoxOutlined /> Kết luận lâm sàng</Title>
-                
-                {/* Cảnh báo AI */}
-                {aiResult.riskScore > 0.7 && (
-                   <div style={{ padding: 12, background: '#fff2f0', border: '1px solid #ffccc7', borderRadius: 4, marginBottom: 16 }}>
-                      <WarningOutlined style={{ color: 'red' }} /> <b>AI Cảnh báo: Nguy cơ CAO</b>
-                   </div>
-                )}
+          {/* Card Thông Tin Bệnh Nhân */}
+          <Card title={<><MedicineBoxOutlined /> Thông Tin Bệnh Nhân</>} bordered={false} style={{ borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <Descriptions column={1} layout="horizontal" labelStyle={{ fontWeight: 'bold', width: 100 }}>
+              <Descriptions.Item label="Họ tên">{data.patient.name}</Descriptions.Item>
+              <Descriptions.Item label="Ngày sinh">{data.patient.dob}</Descriptions.Item>
+              <Descriptions.Item label="Giới tính">{data.patient.gender}</Descriptions.Item>
+              <Descriptions.Item label="Địa chỉ">{data.patient.address}</Descriptions.Item>
+              <Descriptions.Item label="Tiền sử">{data.patient.history}</Descriptions.Item>
+            </Descriptions>
+          </Card>
 
-                <div style={{ marginBottom: 20 }}>
-                   <Text strong>Đánh giá rủi ro:</Text>
-                   <Radio.Group value={finalRisk} onChange={e => setFinalRisk(e.target.value)} buttonStyle="solid" style={{ width: '100%', marginTop: 8 }}>
-                      <Radio.Button value="Low" style={{ width: '33%', textAlign: 'center' }}>Thấp</Radio.Button>
-                      <Radio.Button value="Medium" style={{ width: '33%', textAlign: 'center' }}>TB</Radio.Button>
-                      <Radio.Button value="High" style={{ width: '33%', textAlign: 'center' }}>Cao</Radio.Button>
-                   </Radio.Group>
-                </div>
+          {/* Card Xác Nhận */}
+          <Card style={{ marginTop: 24, borderRadius: 12 }} bordered={false}>
+             <Title level={5}>Xác nhận của bác sĩ</Title>
+             <Space direction="vertical" style={{ width: '100%' }}>
+               <Button type="primary" block icon={<CheckCircleOutlined />} style={{ background: '#0050b3' }}>Đồng ý kết quả này</Button>
+               <Button block danger>Chỉnh sửa chẩn đoán</Button>
+             </Space>
+          </Card>
 
-                <div style={{ flex: 1 }}>
-                   <Text strong>Ghi chú chuyên môn:</Text>
-                   <Input.TextArea rows={6} placeholder="Nhập ghi chú..." style={{ marginTop: 8 }} />
-                </div>
-
-                <Button type="primary" size="large" icon={<SaveOutlined />} block onClick={handleVerify} loading={loading} style={{ marginTop: 16 }}>
-                   Lưu hồ sơ
-                </Button>
-             </div>
-          </div>
-
-        </Content>
-      </Layout>
-    </Layout>
+        </Col>
+      </Row>
+    </div>
   );
 };
 
