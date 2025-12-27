@@ -15,7 +15,7 @@ namespace Aura.Infrastructure.Persistence
 
         public DbSet<Clinic> Clinics { get; set; }
         public DbSet<Doctor> Doctors { get; set; }
-
+        public DbSet<MedicalReport> MedicalReports { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
