@@ -1,18 +1,22 @@
 using Aura.Domain.Common;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Aura.Domain.Entities
 {
-    // Báo cáo y tế chính thức do bác sĩ xác nhận
     public class MedicalReport : BaseEntity
     {
         public Guid AIResultId { get; set; }
-        public virtual AIResult AIResult { get; set; } // Foreign Key
+        
+        [ForeignKey("AIResultId")]
+        public AIResult? AIResult { get; set; } // Thêm ? cho phép null tạm thời
 
         public Guid DoctorId { get; set; }
-        public virtual User Doctor { get; set; }
+        
+        [ForeignKey("DoctorId")]
+        public Doctor? Doctor { get; set; } // Thêm ?
 
-        public string FinalRiskLevel { get; set; } // "Low", "Medium", "High"
-        public string DoctorNotes { get; set; }    // Lời dặn dò
-        public DateTime VerifiedAt { get; set; } = DateTime.UtcNow;
+        // Khởi tạo giá trị mặc định để tránh warning
+        public string FinalRiskLevel { get; set; } = string.Empty; 
+        public string DoctorNotes { get; set; } = string.Empty;
     }
 }
