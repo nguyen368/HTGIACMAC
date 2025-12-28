@@ -1,3 +1,4 @@
+
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { Spin, Result, Button } from 'antd';
@@ -41,6 +42,7 @@ const App: React.FC = () => {
               extra={<Button type="primary"><Link to="/">Về trang chủ</Link></Button>}
             />
           } />
+          <Route path="/history" element={<HistoryList />} />
         </Route>
       </Routes>
     </Suspense>
