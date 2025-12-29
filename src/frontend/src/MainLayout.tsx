@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Button, theme, Avatar, Dropdown, Space, Badge } from 'antd';
+import { Layout, Menu, Button, theme, Avatar, Dropdown, Space, Badge, message } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -24,12 +24,28 @@ const MainLayout: React.FC = () => {
     token: { colorBgContainer },
   } = theme.useToken();
 
-  // Menu items cho User Dropdown
-  const userMenu = [
-    { key: '1', label: 'Hồ sơ cá nhân', icon: <UserOutlined /> },
-    { key: '2', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
+  // --- LOGIC MỚI: Xử lý sự kiện khi bấm vào menu User ---
+  const handleUserMenuClick = ({ key }: { key: string }) => {
+    if (key === 'logout') {
+      // 1. Xóa token
+      localStorage.removeItem('accessToken');
+      // 2. Thông báo
+      message.success('Đã đăng xuất thành công');
+      // 3. Chuyển về trang Login
+      navigate('/login');
+    } else if (key === 'profile') {
+      message.info('Tính năng Hồ sơ đang phát triển');
+    } else if (key === 'settings') {
+      message.info('Tính năng Cài đặt đang phát triển');
+    }
+  };
+
+  // Menu items được định nghĩa lại với key rõ ràng
+  const userMenuItems = [
+    { key: 'profile', label: 'Hồ sơ cá nhân', icon: <UserOutlined /> },
+    { key: 'settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
     { type: 'divider' },
-    { key: '3', label: 'Đăng xuất', icon: <LogoutOutlined />, danger: true },
+    { key: 'logout', label: 'Đăng xuất', icon: <LogoutOutlined />, danger: true },
   ];
 
   return (
@@ -53,7 +69,8 @@ const MainLayout: React.FC = () => {
           alignItems: 'center', 
           justifyContent: 'center',
           background: '#002140',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          transition: 'all 0.2s'
         }}>
            {collapsed ? (
              <div style={{ color: 'white', fontWeight: 'bold', fontSize: '20px' }}>H+</div>
@@ -69,6 +86,7 @@ const MainLayout: React.FC = () => {
           theme="dark"
           mode="inline"
           defaultSelectedKeys={[location.pathname]}
+          // Xử lý chuyển trang khi bấm menu bên trái
           onClick={({ key }) => navigate(key)}
           style={{ padding: '16px 0', fontSize: '15px' }}
           items={[
@@ -112,6 +130,7 @@ const MainLayout: React.FC = () => {
           top: 0,
           zIndex: 9
         }}>
+          {/* Nút thu gọn/mở rộng menu */}
           <Button
             type="text"
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -125,8 +144,15 @@ const MainLayout: React.FC = () => {
               <Button type="text" icon={<BellOutlined style={{ fontSize: 20 }} />} shape="circle" />
             </Badge>
 
-            {/* User Profile */}
-            <Dropdown menu={{ items: userMenu as any }} placement="bottomRight" arrow>
+            {/* User Profile Dropdown */}
+            <Dropdown 
+              menu={{ 
+                items: userMenuItems as any, 
+                onClick: handleUserMenuClick // <--- QUAN TRỌNG: Gắn hàm xử lý vào đây
+              }} 
+              placement="bottomRight" 
+              arrow
+            >
               <Space style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: '4px', transition: 'background 0.3s' }} className="user-dropdown">
                 <Avatar style={{ backgroundColor: '#0050b3' }} icon={<UserOutlined />} />
                 <div style={{ lineHeight: '1.2', textAlign: 'right', display: collapsed ? 'none' : 'block' }}>
@@ -139,7 +165,7 @@ const MainLayout: React.FC = () => {
         </Header>
         
         <Content style={{ margin: '0', background: '#f0f2f5', minHeight: 280 }}>
-          {/* Outlet là nơi render các route con (Upload, Result...) */}
+          {/* Outlet là nơi nội dung các trang con (Upload, History...) hiển thị */}
           <Outlet />
         </Content>
 

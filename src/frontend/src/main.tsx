@@ -1,12 +1,13 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import App from './App.tsx'
+import App from './App'
 import './index.css'
+// 1. Import BrowserRouter
+import { BrowserRouter } from 'react-router-dom'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {/* BrowserRouter là bắt buộc để tính năng chuyển trang hoạt động */}
+    {/* 2. Bọc App trong BrowserRouter */}
     <BrowserRouter>
       <App />
     </BrowserRouter>
