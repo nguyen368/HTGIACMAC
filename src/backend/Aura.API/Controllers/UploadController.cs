@@ -68,5 +68,41 @@ namespace Aura.API.Controllers
 
             return Ok(new { url = imageUrl, prediction = report.FinalRiskLevel });
         }
-    }
+        // ... (Giữ nguyên code cũ)
+
+        // API Upload thường (Không gọi AI)
+        // POST: api/Upload/basic
+        [HttpPost("basic")]
+        public async Task<IActionResult> UploadImageBasic(IFormFile file)
+        {
+            if (file == null || file.Length == 0) return BadRequest("Không có file");
+
+            // 1. Upload lên Cloudinary (Vẫn dùng chung cấu hình cũ)
+            var uploadParams = new ImageUploadParams
+            {
+                File = new FileDescription(file.FileName, file.OpenReadStream()),
+                Folder = "aura_storage_only" // Lưu vào folder khác để phân biệt
+            };
+            var uploadResult = await _cloudinary.UploadAsync(uploadParams);
+
+            if (uploadResult.Error != null) return BadRequest(uploadResult.Error.Message);
+
+            var imageUrl = uploadResult.SecureUrl.ToString();
+
+            // 2. Lưu thông tin vào bảng Upload (Nếu bạn đã có bảng Upload trong DB)
+            // Nếu chưa có bảng Upload, bạn có thể bỏ qua bước này hoặc tạo entity Upload
+            /* var uploadRecord = new Upload 
+            {
+                Url = imageUrl,
+                UploadedAt = DateTime.UtcNow,
+                // UserId = ... (Lấy từ token hoặc gửi lên)
+            };
+            _context.Uploads.Add(uploadRecord);
+            await _context.SaveChangesAsync();
+            */
+
+            // Trả về URL để hiển thị ngay
+            return Ok(new { url = imageUrl, message = "Upload thành công (Chưa phân tích AI)" });
+        }
+    }   
 }

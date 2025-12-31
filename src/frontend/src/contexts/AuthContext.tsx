@@ -1,23 +1,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { message } from 'antd';
-import authApi from '../api/authApi'; 
+import authApi from '../api/authApi';
 
-// 1. Tự định nghĩa lại ở đây để tránh lỗi import
-interface LoginRequest {
+// Định nghĩa kiểu dữ liệu User đầy đủ hơn (thêm userId, email)
+export interface User {
+  userId?: number;
   username: string;
-  password?: string;
-}
-
-interface User {
-  username: string;
-  role: 'bacsi' | 'kythuat';
+  role: 'bacsi' | 'kythuat' | string;
   fullName: string;
+  email?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (data: LoginRequest) => Promise<void>;
+  // Sửa login để chấp nhận 2 tham số: (thông tin, token tùy chọn)
+  login: (data: any, token?: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -33,7 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initAuth = async () => {
       const storedUser = localStorage.getItem('user');
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken'); // Đổi tên key cho thống nhất
       if (storedUser && token) {
         try {
           setUser(JSON.parse(storedUser));
@@ -47,15 +45,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const login = async (data: LoginRequest) => {
+  // --- HÀM LOGIN ĐA NĂNG (QUAN TRỌNG) ---
+  const login = async (data: any, token?: string) => {
     try {
-      const response = await authApi.login(data);
-      const { token, user } = response;
-      setUser(user);
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
+      // TRƯỜNG HỢP 1: Login Giả lập (được gọi từ LoginPage demo)
+      if (token) {
+        // Tự động thêm userId nếu thiếu (để trang Profile không bị lỗi)
+        const fakeUser: User = { 
+            userId: 1, 
+            email: 'demo@medvision.vn',
+            ...data 
+        };
+        
+        setUser(fakeUser);
+        localStorage.setItem('accessToken', token);
+        localStorage.setItem('user', JSON.stringify(fakeUser));
+        navigate('/'); // Chuyển trang ngay lập tức
+        return;
+      }
+
+      // TRƯỜNG HỢP 2: Login thật (Gọi API Server)
+      const response: any = await authApi.login(data);
+      const apiUser = {
+        userId: response.userId,
+        username: response.username || data.username,
+        fullName: response.fullName,
+        role: response.role,
+        email: response.email
+      };
+      
+      setUser(apiUser);
+      localStorage.setItem('accessToken', response.token);
+      localStorage.setItem('user', JSON.stringify(apiUser));
       message.success('Đăng nhập thành công!');
       navigate('/');
+
     } catch (error: any) {
       console.error("Login failed:", error);
       const errorMsg = error.response?.data?.message || 'Đăng nhập thất bại!';
@@ -66,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('token');
+    localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     navigate('/login');
     message.info('Đã đăng xuất.');

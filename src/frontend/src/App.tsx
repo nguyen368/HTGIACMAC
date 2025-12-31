@@ -3,7 +3,7 @@ import { Routes, Route, Link, Navigate } from 'react-router-dom'; // Thêm Navig
 import { Spin, Result, Button } from 'antd';
 import MainLayout from './MainLayout';
 import LoginPage from './Login'; // Import trang Login vừa tạo
-
+import ProfilePage from './features/user/ProfilePage';
 // Import các component (giữ nguyên của bạn)
 const Dashboard = lazy(() => import('./features/doctor/components/Dashboard')); 
 const ImageUpload = lazy(() => import('./features/doctor/components/ImageUpload'));
@@ -18,7 +18,7 @@ const PageLoader = () => (
 );
 
 // Component bảo vệ: Nếu chưa đăng nhập thì đá về Login
-const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem('accessToken');
   if (!token) {
     return <Navigate to="/login" replace />;
@@ -45,7 +45,11 @@ const App: React.FC = () => {
           <Route path="history" element={<HistoryList />} />
           <Route path="stats" element={<StatisticsDashboard />} />
         </Route>
-
+        <Route path="/profile" element={
+    <ProtectedRoute>
+        <ProfilePage />
+    </ProtectedRoute>
+          } />
         {/* 3. Trang 404 */}
         <Route path="*" element={
           <Result

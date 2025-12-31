@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Button, theme, Avatar, Dropdown, Space, Badge, message } from 'antd';
 import {
   MenuFoldOutlined,
@@ -18,29 +18,55 @@ const { Header, Sider, Content, Footer } = Layout;
 const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
+  const location = useLocation(); 
   
   const {
     token: { colorBgContainer },
   } = theme.useToken();
 
-  // --- LOGIC MỚI: Xử lý sự kiện khi bấm vào menu User ---
+  // --- QUẢN LÝ THÔNG TIN USER TRÊN HEADER ---
+  const [userInfo, setUserInfo] = useState({
+    fullName: 'Đang tải...',
+    role: '',
+    avatar: ''
+  });
+
+  const loadUserData = () => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUserInfo({
+            fullName: parsedUser.fullName || 'Người dùng',
+            role: parsedUser.role || 'Thành viên',
+            avatar: parsedUser.avatar || ''
+        });
+      } catch (error) {
+        console.error("Lỗi đọc user data");
+      }
+    } else {
+        setUserInfo({ fullName: 'Khách', role: 'Chưa đăng nhập', avatar: '' });
+    }
+  };
+
+  useEffect(() => {
+    loadUserData();
+  }, [location]); 
+  // ----------------------------------------------------
+
   const handleUserMenuClick = ({ key }: { key: string }) => {
     if (key === 'logout') {
-      // 1. Xóa token
       localStorage.removeItem('accessToken');
-      // 2. Thông báo
+      localStorage.removeItem('user'); 
       message.success('Đã đăng xuất thành công');
-      // 3. Chuyển về trang Login
       navigate('/login');
     } else if (key === 'profile') {
-      message.info('Tính năng Hồ sơ đang phát triển');
+      navigate('/profile'); 
     } else if (key === 'settings') {
       message.info('Tính năng Cài đặt đang phát triển');
     }
   };
 
-  // Menu items được định nghĩa lại với key rõ ràng
   const userMenuItems = [
     { key: 'profile', label: 'Hồ sơ cá nhân', icon: <UserOutlined /> },
     { key: 'settings', label: 'Cài đặt hệ thống', icon: <SettingOutlined /> },
@@ -50,7 +76,6 @@ const MainLayout: React.FC = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {/* Sidebar bên trái */}
       <Sider 
         trigger={null} 
         collapsible 
@@ -62,7 +87,6 @@ const MainLayout: React.FC = () => {
             zIndex: 10
         }}
       >
-        {/* Logo Area */}
         <div style={{ 
           height: 64, 
           display: 'flex', 
@@ -72,21 +96,20 @@ const MainLayout: React.FC = () => {
           overflow: 'hidden',
           transition: 'all 0.2s'
         }}>
-           {collapsed ? (
-             <div style={{ color: 'white', fontWeight: 'bold', fontSize: '20px' }}>H+</div>
-           ) : (
-             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: 32, height: 32, background: '#1890ff', borderRadius: 6, display: 'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:'bold' }}>H+</div>
-                <span style={{ color: 'white', fontWeight: 'bold', fontSize: '18px', whiteSpace: 'nowrap' }}>MED VISION AI</span>
-             </div>
-           )}
+            {collapsed ? (
+              <div style={{ color: 'white', fontWeight: 'bold', fontSize: '20px' }}>H+</div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                 <div style={{ width: 32, height: 32, background: '#1890ff', borderRadius: 6, display: 'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:'bold' }}>H+</div>
+                 <span style={{ color: 'white', fontWeight: 'bold', fontSize: '18px', whiteSpace: 'nowrap' }}>MED VISION AI</span>
+              </div>
+            )}
         </div>
 
         <Menu
           theme="dark"
           mode="inline"
           defaultSelectedKeys={[location.pathname]}
-          // Xử lý chuyển trang khi bấm menu bên trái
           onClick={({ key }) => navigate(key)}
           style={{ padding: '16px 0', fontSize: '15px' }}
           items={[
@@ -105,6 +128,7 @@ const MainLayout: React.FC = () => {
               icon: <FileTextOutlined />,
               label: 'Lịch sử bệnh án',
             },
+            // --- ĐÃ XÓA MỤC HỒ SƠ Ở ĐÂY ---
             {
               type: 'divider', 
             },
@@ -117,7 +141,6 @@ const MainLayout: React.FC = () => {
         />
       </Sider>
       
-      {/* Layout nội dung chính */}
       <Layout>
         <Header style={{ 
           padding: '0 24px', 
@@ -130,7 +153,6 @@ const MainLayout: React.FC = () => {
           top: 0,
           zIndex: 9
         }}>
-          {/* Nút thu gọn/mở rộng menu */}
           <Button
             type="text"
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -139,25 +161,34 @@ const MainLayout: React.FC = () => {
           />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-            {/* Notifications */}
             <Badge count={3} size="small">
               <Button type="text" icon={<BellOutlined style={{ fontSize: 20 }} />} shape="circle" />
             </Badge>
 
-            {/* User Profile Dropdown */}
             <Dropdown 
               menu={{ 
                 items: userMenuItems as any, 
-                onClick: handleUserMenuClick // <--- QUAN TRỌNG: Gắn hàm xử lý vào đây
+                onClick: handleUserMenuClick 
               }} 
               placement="bottomRight" 
               arrow
             >
               <Space style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: '4px', transition: 'background 0.3s' }} className="user-dropdown">
-                <Avatar style={{ backgroundColor: '#0050b3' }} icon={<UserOutlined />} />
+                {/* Avatar hiển thị từ localStorage */}
+                <Avatar 
+                    style={{ backgroundColor: '#1890ff' }} 
+                    icon={<UserOutlined />} 
+                    src={userInfo.avatar} 
+                />
+                
+                {/* Tên hiển thị từ localStorage */}
                 <div style={{ lineHeight: '1.2', textAlign: 'right', display: collapsed ? 'none' : 'block' }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px' }}>BS. Trần Minh</div>
-                  <div style={{ fontSize: '11px', color: '#888' }}>Khoa Nhãn Khoa</div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#002766' }}>
+                      {userInfo.fullName}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#1890ff' }}>
+                      {userInfo.role}
+                  </div>
                 </div>
               </Space>
             </Dropdown>
@@ -165,13 +196,11 @@ const MainLayout: React.FC = () => {
         </Header>
         
         <Content style={{ margin: '0', background: '#f0f2f5', minHeight: 280 }}>
-          {/* Outlet là nơi nội dung các trang con (Upload, History...) hiển thị */}
           <Outlet />
         </Content>
 
         <Footer style={{ textAlign: 'center', color: '#888' }}>
           Med Vision AI ©{new Date().getFullYear()} Created by HTGM Team. 
-          <br/>Hệ thống hỗ trợ chẩn đoán bệnh lý giác mạc.
         </Footer>
       </Layout>
     </Layout>

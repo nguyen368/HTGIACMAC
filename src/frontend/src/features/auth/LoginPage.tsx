@@ -19,9 +19,10 @@ const LoginPage: React.FC = () => {
       
       if ((username === 'bacsi' || username === 'kythuat') && password === '123456') {
         message.success('Đăng nhập thành công!');
-        
+        const fakeUserId = 1;
         // Gọi hàm login để lưu trạng thái
         login({
+          userId: fakeUserId,
           username,
           role: username as 'bacsi' | 'kythuat',
           fullName: username === 'bacsi' ? 'Bác sĩ Nguyễn Văn A' : 'Kỹ thuật viên Trần Thị B'
