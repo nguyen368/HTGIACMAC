@@ -1,28 +1,33 @@
 import axiosClient from './axiosClient';
 
-// --- QUAN TRỌNG: Phải có chữ export ở đầu ---
+// Interface cho Request Login
 export interface LoginRequest {
-  username: string;
-  password?: string;
+  email: string;     // Sửa username -> email cho khớp Backend
+  password: string;
 }
 
-export interface LoginResponse {
-  token: string;
-  user: {
-    username: string;
-    fullName: string;
-    role: 'bacsi' | 'kythuat';
-  };
+// Interface cho Request Register (Mới thêm)
+export interface RegisterRequest {
+  fullName: string;
+  email: string;
+  password: string;
 }
-// ---------------------------------------------
+
+export interface AuthResponse {
+  message: string;
+  userId: string;
+  // token: string; // Tuần sau sẽ có token
+}
 
 const authApi = {
-  login(data: LoginRequest): Promise<LoginResponse> {
+  // Gọi API Đăng nhập
+  login(data: LoginRequest) {
     return axiosClient.post('/Auth/login', data);
   },
-  
-  getProfile() {
-    return axiosClient.get('/Auth/me');
+
+  // Gọi API Đăng ký (Mới thêm)
+  register(data: RegisterRequest) {
+    return axiosClient.post('/Auth/register', data);
   }
 };
 

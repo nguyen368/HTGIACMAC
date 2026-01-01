@@ -1,10 +1,12 @@
 import React, { Suspense, lazy } from 'react';
-import { Routes, Route, Link, Navigate } from 'react-router-dom'; // Thêm Navigate
+import { Routes, Route, Link, Navigate } from 'react-router-dom';
 import { Spin, Result, Button } from 'antd';
 import MainLayout from './MainLayout';
-import LoginPage from './Login'; // Import trang Login vừa tạo
+import LoginPage from './features/auth/LoginPage';
+import RegisterPage from './features/auth/RegisterPage'; // <--- MỚI THÊM: Import trang đăng ký
 import ProfilePage from './features/user/ProfilePage';
-// Import các component (giữ nguyên của bạn)
+
+// Import các component (Lazy load)
 const Dashboard = lazy(() => import('./features/doctor/components/Dashboard')); 
 const ImageUpload = lazy(() => import('./features/doctor/components/ImageUpload'));
 const DiagnosisViewer = lazy(() => import('./features/doctor/components/DiagnosisViewer'));
@@ -30,10 +32,11 @@ const App: React.FC = () => {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        {/* 1. Route Login nằm NGOÀI MainLayout (để không hiện sidebar) */}
+        {/* --- NHÓM PUBLIC ROUTES (Không cần đăng nhập) --- */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} /> {/* <--- MỚI THÊM: Route Đăng ký */}
 
-        {/* 2. Các Route chính nằm TRONG MainLayout và được BẢO VỆ */}
+        {/* --- NHÓM PRIVATE ROUTES (Cần đăng nhập) --- */}
         <Route path="/" element={
           <ProtectedRoute>
             <MainLayout />
@@ -45,12 +48,14 @@ const App: React.FC = () => {
           <Route path="history" element={<HistoryList />} />
           <Route path="stats" element={<StatisticsDashboard />} />
         </Route>
+        
         <Route path="/profile" element={
-    <ProtectedRoute>
-        <ProfilePage />
-    </ProtectedRoute>
-          } />
-        {/* 3. Trang 404 */}
+            <ProtectedRoute>
+                <ProfilePage />
+            </ProtectedRoute>
+        } />
+
+        {/* --- TRANG 404 --- */}
         <Route path="*" element={
           <Result
             status="404"
