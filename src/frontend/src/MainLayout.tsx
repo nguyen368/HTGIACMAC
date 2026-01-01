@@ -9,7 +9,8 @@ import {
   FileTextOutlined,
   BellOutlined,
   SettingOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  UsergroupAddOutlined // Thêm icon cho TV3
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 
@@ -118,6 +119,13 @@ const MainLayout: React.FC = () => {
               icon: <DashboardOutlined />,
               label: 'Tổng quan (Dashboard)',
             },
+            // --- CHÈN THÊM MỤC CỦA TV3 VÀO ĐÂY ---
+            {
+              key: '/patient-queue',
+              icon: <UsergroupAddOutlined />,
+              label: 'Hàng chờ khám bệnh',
+            },
+            // ------------------------------------
             {
               key: '/upload',
               icon: <UploadOutlined />,
@@ -128,7 +136,6 @@ const MainLayout: React.FC = () => {
               icon: <FileTextOutlined />,
               label: 'Lịch sử bệnh án',
             },
-            // --- ĐÃ XÓA MỤC HỒ SƠ Ở ĐÂY ---
             {
               type: 'divider', 
             },
@@ -174,14 +181,12 @@ const MainLayout: React.FC = () => {
               arrow
             >
               <Space style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: '4px', transition: 'background 0.3s' }} className="user-dropdown">
-                {/* Avatar hiển thị từ localStorage */}
                 <Avatar 
                     style={{ backgroundColor: '#1890ff' }} 
                     icon={<UserOutlined />} 
                     src={userInfo.avatar} 
                 />
                 
-                {/* Tên hiển thị từ localStorage */}
                 <div style={{ lineHeight: '1.2', textAlign: 'right', display: collapsed ? 'none' : 'block' }}>
                   <div style={{ fontWeight: 600, fontSize: '14px', color: '#002766' }}>
                       {userInfo.fullName}
