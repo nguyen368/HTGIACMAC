@@ -2,35 +2,33 @@
 import axios from 'axios';
 
 const axiosClient = axios.create({
-  // Địa chỉ backend của bạn (Check file launchSettings.json trong backend để biết port)
-  // Thường là https://localhost:7001 hoặc http://localhost:5000
-// Cập nhật cổng thành 5099
-baseURL: 'http://localhost:5099/api',
+  // Ưu tiên lấy từ biến môi trường (Docker), nếu không có thì dùng localhost:5038
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5038/api',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor: Tự động gắn Token vào header mỗi khi gọi API
+// Interceptor: Tự động gắn Token
 axiosClient.interceptors.request.use(async (config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('accessToken'); // Lưu ý: Code Login bạn dùng key 'accessToken'
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Interceptor: Xử lý lỗi trả về (VD: Token hết hạn thì tự logout)
 axiosClient.interceptors.response.use(
   (response) => {
     return response.data;
   },
   (error) => {
+    // Log lỗi ra để dễ debug
+    console.error("API Error:", error.response || error.message);
+    
     if (error.response && error.response.status === 401) {
-      // Token hết hạn hoặc không hợp lệ -> Xóa storage và reload
-      localStorage.removeItem('token');
+      localStorage.removeItem('accessToken');
       localStorage.removeItem('user');
-      // window.location.href = '/login'; // Tùy chọn: force logout
     }
     throw error;
   }

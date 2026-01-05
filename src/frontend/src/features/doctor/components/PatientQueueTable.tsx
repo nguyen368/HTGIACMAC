@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Tag, Button, Card } from 'antd';
+import { Table, Tag, Button, Card, message } from 'antd';
 import { UserOutlined, FileSearchOutlined } from '@ant-design/icons';
-// --- SỬA LỖI TẠI ĐÂY: Thêm từ khóa 'type' ---
+// Import interface PatientQueueItem để đảm bảo type-safe
 import { doctorApi, type PatientQueueItem } from '../../../api/doctorApi';
 
 const PatientQueueTable: React.FC = () => {
@@ -9,16 +9,27 @@ const PatientQueueTable: React.FC = () => {
     const [data, setData] = useState<PatientQueueItem[]>([]);
 
     useEffect(() => {
-        const mockDoctorId = "doctor-guid-id"; 
+        // SỬA LỖI 400 (Tiềm ẩn): Backend yêu cầu Guid, chuỗi text thường sẽ gây lỗi
+        // Đây là một Guid ngẫu nhiên hợp lệ để test
+        const mockDoctorId = "d290f1ee-6c54-4b01-90e6-d701748f0851"; 
         
-        setLoading(true);
-        doctorApi.getAssignedPatients(mockDoctorId)
-            .then((res) => {
-                // @ts-ignore
-                setData(res || []); 
-            })
-            .catch(err => console.error(err))
-            .finally(() => setLoading(false));
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const res = await doctorApi.getAssignedPatients(mockDoctorId);
+                // Xử lý an toàn: Nếu API trả về mảng thì dùng luôn, nếu bọc trong data thì lấy data
+                // @ts-ignore: Bỏ qua nếu cấu hình axios của bạn trả về data trực tiếp
+                const result = Array.isArray(res) ? res : (res?.data || []);
+                setData(result);
+            } catch (err) {
+                console.error("Lỗi khi tải danh sách bệnh nhân:", err);
+                // message.error("Không thể kết nối đến máy chủ."); 
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
     }, []);
 
     const columns = [
@@ -32,7 +43,13 @@ const PatientQueueTable: React.FC = () => {
             title: 'Ngày gửi',
             dataIndex: 'createdAt',
             key: 'createdAt',
-            render: (date: string) => new Date(date).toLocaleDateString('vi-VN'),
+            render: (date: string) => {
+                try {
+                    return new Date(date).toLocaleDateString('vi-VN');
+                } catch {
+                    return date;
+                }
+            },
         },
         {
             title: 'Cảnh báo AI',
@@ -63,6 +80,7 @@ const PatientQueueTable: React.FC = () => {
                 rowKey="reportId" 
                 loading={loading}
                 pagination={{ pageSize: 5 }} 
+                locale={{ emptyText: 'Chưa có bệnh nhân nào' }}
             />
         </Card>
     );

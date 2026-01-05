@@ -47,7 +47,8 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:5038
+      - VITE_API_URL=http://localhost:5038/api
+      
     depends_on:
       - aura-backend
 
