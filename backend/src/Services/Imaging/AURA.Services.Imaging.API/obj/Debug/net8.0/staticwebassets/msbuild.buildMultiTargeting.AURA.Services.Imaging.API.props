@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\AURA.Services.Imaging.API.props" />
+</Project>

@@ -1,0 +1,6 @@
+@AURA.Services.Notification.API_HostAddress = http://localhost:5016
+
+GET {{AURA.Services.Notification.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "hrgoA2/tz+nJ6Xs/0mxPWEnQ/Hp2luJIEDAXG5ELr6A=",
+  "Source": "AURA.Services.MedicalRecord.API",
+  "BasePath": "_content/AURA.Services.MedicalRecord.API",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

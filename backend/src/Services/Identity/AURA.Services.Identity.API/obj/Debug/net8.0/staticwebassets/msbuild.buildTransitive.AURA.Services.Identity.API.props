@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\buildMultiTargeting\AURA.Services.Identity.API.props" />
+</Project>

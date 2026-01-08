@@ -1,0 +1,16 @@
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.AssemblyInfoInputs.cache
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.AssemblyInfo.cs
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.csproj.CoreCompileInputs.cache
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.sourcelink.json
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\bin\Debug\net8.0\AURA.Services.Identity.Domain.deps.json
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\bin\Debug\net8.0\AURA.Services.Identity.Domain.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\bin\Debug\net8.0\AURA.Services.Identity.Domain.pdb
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\bin\Debug\net8.0\AURA.Shared.Kernel.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\bin\Debug\net8.0\AURA.Shared.Kernel.pdb
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.csproj.AssemblyReference.cache
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Ser.E043EE57.Up2Date
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\refint\AURA.Services.Identity.Domain.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\AURA.Services.Identity.Domain.pdb
+D:\vis\do an\HTGIACMAC\backend\src\Services\Identity\AURA.Services.Identity.Domain\obj\Debug\net8.0\ref\AURA.Services.Identity.Domain.dll

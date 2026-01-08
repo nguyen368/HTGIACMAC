@@ -1,0 +1,16 @@
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\bin\Debug\net8.0\AURA.Services.Billing.Domain.deps.json
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\bin\Debug\net8.0\AURA.Services.Billing.Domain.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\bin\Debug\net8.0\AURA.Services.Billing.Domain.pdb
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\bin\Debug\net8.0\AURA.Shared.Kernel.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\bin\Debug\net8.0\AURA.Shared.Kernel.pdb
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.csproj.AssemblyReference.cache
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.AssemblyInfoInputs.cache
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.AssemblyInfo.cs
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.csproj.CoreCompileInputs.cache
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.sourcelink.json
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Ser.736D49A3.Up2Date
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\refint\AURA.Services.Billing.Domain.dll
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\AURA.Services.Billing.Domain.pdb
+D:\vis\do an\HTGIACMAC\backend\src\Services\Billing\AURA.Services.Billing.Domain\obj\Debug\net8.0\ref\AURA.Services.Billing.Domain.dll
