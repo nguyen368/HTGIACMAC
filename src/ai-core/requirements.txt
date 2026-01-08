@@ -1,7 +1,0 @@
-flask
-flask-cors
-numpy
-pillow
-torch
-torchvision
-opencv-python-headless
