@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\buildMultiTargeting\AURA.Services.Billing.API.props" />
-</Project>

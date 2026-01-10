@@ -1,62 +1,51 @@
-using AURA.Services.Identity.Application.Interfaces;
+using AURA.Services.Identity.Application.Interfaces; // <-- Đã thêm dòng này
 using AURA.Services.Identity.Domain.Entities;
 using AURA.Services.Identity.Domain.Repositories;
-using AURA.Shared.Kernel.CQRS;
 using AURA.Shared.Kernel.Wrapper;
+using MediatR;
 
-namespace AURA.Services.Identity.Application.Users.Commands.RegisterUser;
-
-public class RegisterUserHandler : ICommandHandler<RegisterUserCommand, Result<Guid>>
+namespace AURA.Services.Identity.Application.Users.Commands.RegisterUser
 {
-    private readonly IUserRepository _userRepository;
-    private readonly IPasswordHasher _passwordHasher;
-
-    public RegisterUserHandler(IUserRepository userRepository, IPasswordHasher passwordHasher)
+    public class RegisterUserHandler : IRequestHandler<RegisterUserCommand, Result<Guid>>
     {
-        _userRepository = userRepository;
-        _passwordHasher = passwordHasher;
-    }
+        private readonly IUserRepository _userRepository;
+        private readonly IPasswordHasher _passwordHasher;
 
-    public async Task<Result<Guid>> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
-    {
-        // 1. Kiểm tra Email đã tồn tại trong hệ thống chưa
-        var emailExists = await _userRepository.ExistsAsync(request.Email);
-        if (emailExists)
+        public RegisterUserHandler(IUserRepository userRepository, IPasswordHasher passwordHasher)
         {
-            return Result<Guid>.Failure("Email này đã được đăng ký trong hệ thống.");
+            _userRepository = userRepository;
+            _passwordHasher = passwordHasher;
         }
 
-        // 2. Kiểm tra vai trò (Role) có hợp lệ không
-        var validRoles = new[] { "Admin", "Clinic", "Doctor", "Patient" };
-        if (!validRoles.Contains(request.Role))
+        public async Task<Result<Guid>> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
         {
-            return Result<Guid>.Failure("Vai trò người dùng không hợp lệ.");
-        }
+            var existingUser = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken);
+            if (existingUser != null)
+            {
+                return Result<Guid>.Failure("Username already exists.");
+            }
 
-        // 3. Mã hóa mật khẩu trước khi lưu vào Database (NFR-12: Security)
-        var passwordHash = _passwordHasher.Hash(request.Password);
+            var passwordHash = _passwordHasher.Hash(request.Password);
 
-        // 4. Khởi tạo thực thể User từ Domain
-        var user = new User(
-            request.Email,
-            passwordHash,
-            request.FullName,
-            request.Role
-        );
+            string role = "Patient";
+            if (!string.IsNullOrEmpty(request.Role) && (request.Role == "Admin" || request.Role == "Doctor"))
+            {
+                role = request.Role;
+            }
 
-        // 5. Lưu vào cơ sở dữ liệu qua Repository
-        try 
-        {
-            await _userRepository.AddAsync(user);
-            // Lưu ý: UnitOfWork.SaveChangesAsync() thường được gọi bên trong Repository.AddAsync 
-            // hoặc ở cuối Handler tùy vào cách bạn thiết lập Repository.
+            // Entity đã có Id, Constructor sẽ gán vào property của lớp cha
+            var newUser = new User(
+                Guid.NewGuid(),
+                request.Username,
+                passwordHash,
+                request.Email,
+                request.FullName ?? "",
+                role
+            );
+
+            await _userRepository.AddAsync(newUser);
             
-            return Result<Guid>.Success(user.Id);
-        }
-        catch (Exception ex)
-        {
-            // Log lỗi tại đây nếu cần
-            return Result<Guid>.Failure($"Có lỗi xảy ra khi tạo tài khoản: {ex.Message}");
+            return Result<Guid>.Success(newUser.Id);
         }
     }
 }

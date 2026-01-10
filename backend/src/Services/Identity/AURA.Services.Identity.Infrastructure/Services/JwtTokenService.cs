@@ -6,42 +6,50 @@ using AURA.Services.Identity.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
-namespace AURA.Services.Identity.Infrastructure.Services;
-
-public class JwtTokenService : IJwtTokenService
+namespace AURA.Services.Identity.Infrastructure.Services
 {
-    private readonly IConfiguration _configuration;
-
-    public JwtTokenService(IConfiguration configuration)
+    public class JwtTokenService : IJwtTokenService
     {
-        _configuration = configuration;
-    }
+        private readonly IConfiguration _configuration;
 
-    public string GenerateToken(User user)
-    {
-        // 1. Lấy Key từ cấu hình (appsettings.json)
-        var secretKey = _configuration["JwtSettings:Secret"] ?? "DayLaMotCaiKeyRatDaiVaBiMatChoDuAnAURA123456";
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        // 2. Định nghĩa các Claims (Thông tin chứa trong Token)
-        var claims = new List<Claim>
+        public JwtTokenService(IConfiguration configuration)
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("role", user.Role) // Quan trọng cho phân quyền RBAC
-        };
+            _configuration = configuration;
+        }
 
-        // 3. Tạo Token
-        var token = new JwtSecurityToken(
-            issuer: _configuration["JwtSettings:Issuer"] ?? "AURA",
-            audience: _configuration["JwtSettings:Audience"] ?? "AURA_Client",
-            claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(60), // Hết hạn sau 60 phút
-            signingCredentials: creds
-        );
+        public string GenerateToken(User user)
+        {
+            // Lấy config từ appsettings.json
+            var secretKey = _configuration["JwtSettings:SecretKey"];
+            var issuer = _configuration["JwtSettings:Issuer"];
+            var audience = _configuration["JwtSettings:Audience"];
+            var durationInMinutes = double.Parse(_configuration["JwtSettings:DurationInMinutes"]!);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+            // Tạo danh sách Claims (Thông tin đóng gói trong token)
+            var claims = new List<Claim>
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim("username", user.Username),
+                new Claim("fullName", user.FullName),
+                
+                // QUAN TRỌNG: Claim Role để Authorization Middleware đọc được
+                new Claim(ClaimTypes.Role, user.Role), 
+                
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(durationInMinutes),
+                signingCredentials: credentials);
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
     }
 }

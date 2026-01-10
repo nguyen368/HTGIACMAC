@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\AURA.Services.Identity.API.props" />
-</Project>
