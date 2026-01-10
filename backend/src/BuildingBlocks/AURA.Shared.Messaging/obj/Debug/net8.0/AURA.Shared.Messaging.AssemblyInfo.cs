@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AURA.Shared.Messaging")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d9c5bc88044ed2eb83032c81765b616cf4d21214")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1c1f35a7c894a79a7e81836bf8edc8a97c1d6a1b")]
 [assembly: System.Reflection.AssemblyProductAttribute("AURA.Shared.Messaging")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AURA.Shared.Messaging")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
