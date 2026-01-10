@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AURA.Services.Billing.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cfa3f705b7b76d3d2a30f3431852057ae64eef46")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d9c5bc88044ed2eb83032c81765b616cf4d21214")]
 [assembly: System.Reflection.AssemblyProductAttribute("AURA.Services.Billing.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AURA.Services.Billing.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
