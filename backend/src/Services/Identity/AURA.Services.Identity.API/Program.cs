@@ -1,35 +1,82 @@
-using AURA.Services.Identity.Application.Interfaces;
-using AURA.Services.Identity.Domain.Repositories;
-using AURA.Services.Identity.Infrastructure.Data;
-using AURA.Services.Identity.Infrastructure.Repositories;
-using AURA.Services.Identity.Infrastructure.Services;
-using Microsoft.EntityFrameworkCore;
-using System.Reflection;
+using AURA.Services.Identity.Infrastructure;
+using AURA.Services.Identity.Application;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models; // Quan trọng: Để cấu hình Swagger UI
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Database Context
-builder.Services.AddDbContext<AppIdentityDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// 2. Đăng ký MediatR (Xử lý Command/Query)
-// Quét toàn bộ assembly của tầng Application để tìm Handler
-var applicationAssembly = typeof(AURA.Services.Identity.Application.Users.Commands.RegisterUser.RegisterUserCommand).Assembly;
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(applicationAssembly));
-
-// 3. Đăng ký các Services hạ tầng (QUAN TRỌNG)
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
-builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-
-// 4. API Controllers & Swagger
+// Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// --- CẤU HÌNH SWAGGER ĐỂ HIỆN NÚT AUTHORIZE ---
+builder.Services.AddSwaggerGen(option =>
+{
+    option.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA Identity API", Version = "v1" });
+    
+    // Định nghĩa bảo mật là Bearer Token
+    option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Description = "Vui lòng nhập Token vào ô bên dưới theo định dạng: Bearer {token}",
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        BearerFormat = "JWT",
+        Scheme = "Bearer"
+    });
+
+    // Yêu cầu Swagger sử dụng định nghĩa bảo mật trên
+    option.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type=ReferenceType.SecurityScheme,
+                    Id="Bearer"
+                }
+            },
+            new string[]{}
+        }
+    });
+});
+// -----------------------------------------------
+
+// Clean Architecture Injection
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+
+// Cấu hình JWT Authentication
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    var secretKey = builder.Configuration["JwtSettings:SecretKey"] 
+                    ?? throw new InvalidOperationException("JwtSettings:SecretKey is missing");
+
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
+        ValidAudience = builder.Configuration["JwtSettings:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+    };
+});
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// 5. Middleware Pipeline
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -37,7 +84,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Middleware
+app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

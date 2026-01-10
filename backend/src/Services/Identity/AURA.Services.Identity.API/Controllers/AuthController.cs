@@ -6,7 +6,7 @@ using AURA.Services.Identity.Application.Users.Queries.Login;
 namespace AURA.Services.Identity.API.Controllers;
 
 [ApiController]
-[Route("api/identity/auth")]
+[Route("api/auth")]
 public class AuthController : ControllerBase
 {
     private readonly ISender _sender;

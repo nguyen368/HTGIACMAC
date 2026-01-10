@@ -1,24 +1,31 @@
 using AURA.Shared.Kernel.Primitives;
 
-namespace AURA.Services.Identity.Domain.Entities;
-
-public class User : AggregateRoot
+namespace AURA.Services.Identity.Domain.Entities
 {
-    public string Email { get; private set; } = string.Empty;
-    public string PasswordHash { get; private set; } = string.Empty;
-    public string FullName { get; private set; } = string.Empty;
-    public string Role { get; private set; } = string.Empty;
-    public bool IsActive { get; private set; }
-
-    public User(string email, string passwordHash, string fullName, string role)
+    public class User : Entity // Entity đã có sẵn public Guid Id { get; protected set; }
     {
-        Id = Guid.NewGuid();
-        Email = email;
-        PasswordHash = passwordHash;
-        FullName = fullName;
-        Role = role;
-        IsActive = true;
-    }
+        // Constructor rỗng cho EF Core
+        private User() { }
 
-    private User() { } 
+        // Constructor public
+        public User(Guid id, string username, string passwordHash, string email, string fullName, string role)
+        {
+            Id = id; // Gán vào Id của lớp cha (Entity)
+            Username = username;
+            PasswordHash = passwordHash;
+            Email = email;
+            FullName = fullName;
+            Role = role;
+            CreatedAt = DateTime.UtcNow;
+        }
+
+        // --- ĐÃ XÓA DÒNG public Guid Id Ở ĐÂY ĐỂ HẾT WARNING ---
+        
+        public string Username { get; private set; } = string.Empty;
+        public string PasswordHash { get; private set; } = string.Empty;
+        public string Email { get; private set; } = string.Empty;
+        public string FullName { get; private set; } = string.Empty;
+        public string Role { get; private set; } = "Patient";
+        public DateTime CreatedAt { get; private set; }
+    }
 }
