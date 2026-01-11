@@ -3,15 +3,23 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Copy thư viện và cài đặt
+# Cài đặt thư viện hệ thống cho AI ---
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy file requirements đã có Pytorch/Tensorflow
 COPY requirements.txt .
+
+# Cài đặt thư viện (Pytorch, torchvision, numpy...)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy code
+# Copy mã nguồn có chức năng kiểm tra GPU/CPU
 COPY . .
 
-# Mở cổng 8000
+# Mở cổng 8000 cho Flask
 EXPOSE 8000
 
-# Chạy app
+# Chạy ứng dụng
 CMD ["python", "main.py"]
