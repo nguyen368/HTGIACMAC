@@ -49,7 +49,7 @@ def analyze():
                 "Phát hiện điểm xuất huyết nhỏ ở vùng trung tâm",
                 "Mạch máu có dấu hiệu co hẹp nhẹ"
             ],
-            "recommendation": "Cần theo dõi thêm và tái khám sau 3 tháng."
+            "recommendation": "Cần theo dõi thêm và tái khám sau 3 tháng.",
             "ai_version": "AURA-v1.0.0" 
         }
         # ---------------------------------------
