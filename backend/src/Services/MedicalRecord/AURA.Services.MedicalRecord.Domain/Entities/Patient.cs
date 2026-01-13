@@ -34,5 +34,11 @@ public class Patient : AggregateRoot
         Address = address;
     }
 
-    private Patient() { }
+    private Patient()
+    {
+        FullName = null!;
+        Gender = null!;
+        PhoneNumber = null!;
+        Address = null!;
+    }
 }
