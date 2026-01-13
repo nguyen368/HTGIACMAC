@@ -9,20 +9,24 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<ImagingDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// --- [THÊM MỚI] CẤU HÌNH CORS (Để Frontend gọi được) ---
+// --- [QUAN TRỌNG] Đăng ký HttpClient (Để gọi sang service AI Core Python) ---
+builder.Services.AddHttpClient();
+// ----------------------------------------------------------------------------
+
+// --- [QUAN TRỌNG] Cấu hình CORS (Cho phép Frontend gọi vào) ---
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000") // Cho phép React App
+            policy.WithOrigins("http://localhost:3000") // Cho phép Frontend React
                   .AllowAnyMethod()
                   .AllowAnyHeader();
         });
 });
-// ------------------------------------------------------
+// --------------------------------------------------------------
 
-// 2. Đăng ký Cloudinary Service (DI)
+// 2. Đăng ký Cloudinary Service (Dependency Injection)
 builder.Services.AddScoped<IImageUploader, CloudinaryUploader>();
 
 // 3. Các dịch vụ cơ bản API
@@ -39,14 +43,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// --- [QUAN TRỌNG] TẮT HTTPS REDIRECTION (Tránh lỗi Network Error) ---
+// --- [CHÚ Ý] Tắt HTTPS Redirection để tránh lỗi SSL ở môi trường dev ---
 // app.UseHttpsRedirection(); 
-// (Mình đã comment dòng trên lại để code chạy ổn định ở môi trường dev)
-// --------------------------------------------------------------------
+// ----------------------------------------------------------------------
 
-// --- [THÊM MỚI] KÍCH HOẠT CORS (Phải đặt trước Auth/MapControllers) ---
+// --- [QUAN TRỌNG] Kích hoạt CORS (Đặt trước Auth/MapControllers) ---
 app.UseCors("AllowReactApp");
-// ---------------------------------------------------------------------
+// -------------------------------------------------------------------
 
 app.UseAuthorization();
 app.MapControllers();
