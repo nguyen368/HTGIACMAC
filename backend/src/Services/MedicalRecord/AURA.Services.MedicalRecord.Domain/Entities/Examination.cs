@@ -12,7 +12,12 @@ public class Examination : Entity
     public string Status { get; private set; } // Pending, Analyzed, Verified
 
     // Constructor rỗng cho EF Core
-    private Examination() { }
+    private Examination() { 
+        DiagnosisResult = null!;
+        DoctorNotes = null!;
+        ImageUrl = null!;
+        Status = null!;
+    }
 
     public Examination(Guid patientId, string imageUrl)
     {
