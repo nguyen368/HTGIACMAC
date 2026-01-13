@@ -9,6 +9,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<ImagingDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// --- [THÊM MỚI] CẤU HÌNH CORS (Để Frontend gọi được) ---
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:3000") // Cho phép React App
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+});
+// ------------------------------------------------------
+
 // 2. Đăng ký Cloudinary Service (DI)
 builder.Services.AddScoped<IImageUploader, CloudinaryUploader>();
 
@@ -26,7 +39,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// --- [QUAN TRỌNG] TẮT HTTPS REDIRECTION (Tránh lỗi Network Error) ---
+// app.UseHttpsRedirection(); 
+// (Mình đã comment dòng trên lại để code chạy ổn định ở môi trường dev)
+// --------------------------------------------------------------------
+
+// --- [THÊM MỚI] KÍCH HOẠT CORS (Phải đặt trước Auth/MapControllers) ---
+app.UseCors("AllowReactApp");
+// ---------------------------------------------------------------------
+
 app.UseAuthorization();
 app.MapControllers();
 
