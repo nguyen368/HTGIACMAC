@@ -4,9 +4,10 @@ using AURA.Services.Imaging.Domain.Entities;
 using AURA.Services.Imaging.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.IO.Compression; // Xử lý file Zip
-using System.Text.Json;      // Xử lý JSON
-using System.Text.Json.Serialization; // Attribute cho JSON
+using System.IO.Compression;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Net.Http.Json; 
 
 namespace AURA.Services.Imaging.API.Controllers;
 
@@ -16,10 +17,8 @@ public class ImagesController : ControllerBase
 {
     private readonly IImageUploader _uploader;
     private readonly ImagingDbContext _context;
-    // [MỚI] Dùng để tạo HTTP Client gọi sang Python
-    private readonly IHttpClientFactory _httpClientFactory; 
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    // Inject thêm HttpClientFactory vào Constructor
     public ImagesController(
         IImageUploader uploader, 
         ImagingDbContext context,
@@ -30,227 +29,180 @@ public class ImagesController : ControllerBase
         _httpClientFactory = httpClientFactory;
     }
 
-    // --- CLASS HỨNG KẾT QUẢ TRẢ VỀ TỪ PYTHON ---
+    // Class hứng kết quả từ AI Python
     private class AiValidationResponse
     {
-        [JsonPropertyName("is_valid")]
-        public bool IsValid { get; set; }
-        
-        [JsonPropertyName("reason")]
-        public string? Reason { get; set; }
+        [JsonPropertyName("is_valid")] public bool IsValid { get; set; }
+        [JsonPropertyName("message")] public string? Message { get; set; }
     }
 
-    // --- HÀM RIÊNG: Gửi ảnh sang AI Core để kiểm tra ---
-    private async Task<(bool IsValid, string Reason)> ValidateImageWithAi(Stream fileStream, string fileName)
+    // --- LIÊN KẾT 1: GỌI AI SERVICE (Port 8000) ---
+    private async Task<(bool IsValid, string Reason)> ValidateImageWithAi(string fileName)
     {
         try 
         {
             var client = _httpClientFactory.CreateClient();
+            string aiServiceUrl = "http://localhost:8000/api/ai/validate-eye"; 
+
+            var payload = new { file_name = fileName, image_url = "" };
+            var response = await client.PostAsJsonAsync(aiServiceUrl, payload);
             
-            // [QUAN TRỌNG] Địa chỉ Service Python (AI Core)
-            // Nếu chạy Local 2 terminal: dùng "http://localhost:5005/validate-eye"
-            // Nếu chạy Docker Compose: dùng "http://ai-core-service:8080/validate-eye"
-            string aiServiceUrl = "http://localhost:5005/validate-eye"; 
+            if (!response.IsSuccessStatusCode) return (true, "AI Warning: Skip Check");
 
-            var content = new MultipartFormDataContent();
-            var streamContent = new StreamContent(fileStream);
-            content.Add(streamContent, "file", fileName);
+            var result = await response.Content.ReadFromJsonAsync<AiValidationResponse>();
+            return (result?.IsValid ?? true, result?.Message ?? "Unknown");
+        }
+        catch { return (true, "AI Error"); }
+    }
 
-            // Gửi request POST sang Python
-            var response = await client.PostAsync(aiServiceUrl, content);
-            
-            // Nếu Service AI chưa bật hoặc lỗi mạng -> Tạm thời cho qua (Skip Check) để không chặn bác sĩ
-            if (!response.IsSuccessStatusCode) 
-                return (true, "AI Service Warning: Không kết nối được (Skip Check)");
+    // --- LIÊN KẾT 2: GỌI NOTIFICATION SERVICE (Port 5005) ---
+    // Hàm này sẽ bắn thông báo sang service khác để báo cho bác sĩ
+    private async Task NotifyUploadSuccess(Guid patientId, int count)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            // URL của Notification Service (Port 5005)
+            string notiUrl = "http://localhost:5005/api/notifications/send"; 
 
-            // Đọc kết quả JSON
-            var jsonString = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<AiValidationResponse>(jsonString, 
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var notification = new 
+            {
+                Title = "Dữ liệu hình ảnh mới",
+                Message = $"Hệ thống vừa nhận được {count} ảnh chụp đáy mắt mới của bệnh nhân {patientId}.",
+                Type = "Info",
+                UserId = Guid.Empty // Gửi cho Admin/Bác sĩ trực (hoặc ID cụ thể nếu có)
+            };
 
-            return (result?.IsValid ?? true, result?.Reason ?? "Unknown");
+            // Gọi bất đồng bộ không cần chờ kết quả (Fire-and-forget)
+            _ = client.PostAsJsonAsync(notiUrl, notification);
         }
         catch (Exception ex)
         {
-            // Log lỗi và cho qua
-            return (true, $"AI Error: {ex.Message}"); 
+            // Chỉ log lỗi, không làm fail request chính
+            Console.WriteLine($"Warning: Không gửi được thông báo. {ex.Message}");
         }
     }
 
-    // --- API 1: Upload lẻ (Đã nâng cấp Validate AI) ---
-    [HttpPost("upload")]
-    public async Task<IActionResult> Upload([FromForm] UploadImageRequest request)
-    {
-        if (request.File == null || request.File.Length == 0)
-            return BadRequest("File ảnh không được để trống");
-
-        // 1. [MỚI] Gọi AI check trước
-        using (var stream = request.File.OpenReadStream())
-        {
-            var (isValid, reason) = await ValidateImageWithAi(stream, request.File.FileName);
-            if (!isValid)
-            {
-                return BadRequest($"Ảnh bị từ chối bởi AI: {reason}");
-            }
-        }
-
-        // 2. Nếu OK thì Upload lên Cloudinary (như cũ)
-        var result = await _uploader.UploadAsync(request.File);
-        
-        if (string.IsNullOrEmpty(result.Url)) 
-            return BadRequest("Upload failed");
-
-        var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
-        
-        _context.Images.Add(image);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { ImageId = image.Id, Url = result.Url });
-    }
-
-    // --- API 2: Upload hàng loạt từ file Zip (Đã nâng cấp Validate AI) ---
+    // --- 1. API UPLOAD HÀNG LOẠT (ZIP) ---
     [HttpPost("batch-upload")]
-    public async Task<IActionResult> BatchUpload(
-        IFormFile zipFile, 
-        [FromForm] Guid clinicId, 
-        [FromForm] Guid patientId)
+    public async Task<IActionResult> BatchUpload(IFormFile zipFile, [FromForm] Guid clinicId, [FromForm] Guid patientId)
     {
-        // 1. Validate file zip đầu vào
-        if (zipFile == null || zipFile.Length == 0)
-            return BadRequest("Vui lòng upload file .zip");
-
-        if (Path.GetExtension(zipFile.FileName).ToLower() != ".zip")
-            return BadRequest("File phải có định dạng .zip");
+        if (zipFile == null || zipFile.Length == 0) return BadRequest("File rỗng");
+        if (Path.GetExtension(zipFile.FileName).ToLower() != ".zip") return BadRequest("Phải là file .zip");
 
         var results = new List<object>();
         int successCount = 0;
 
-        // 2. Xử lý file Zip
         using (var stream = zipFile.OpenReadStream())
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
         {
             foreach (var entry in archive.Entries)
             {
-                // Bỏ qua folder hoặc file rác hệ thống
                 if (string.IsNullOrEmpty(entry.Name) || entry.FullName.StartsWith("__")) continue;
-                
-                // Chỉ xử lý file có đuôi ảnh
                 var ext = Path.GetExtension(entry.Name).ToLower();
                 if (ext != ".jpg" && ext != ".png" && ext != ".jpeg") continue;
 
                 try 
                 {
+                    // Bước 1: Hỏi AI
+                    var (isValid, reason) = await ValidateImageWithAi(entry.Name);
+                    if (!isValid) { results.Add(new { FileName = entry.Name, Status = "Rejected", Error = reason }); continue; }
+
+                    // Bước 2: Upload Cloud
                     using (var entryStream = entry.Open())
                     using (var memoryStream = new MemoryStream())
                     {
-                        // [QUAN TRỌNG] Copy sang MemoryStream để có thể đọc 2 lần (1 cho AI, 1 cho Cloudinary)
                         await entryStream.CopyToAsync(memoryStream);
-                        
-                        // --- BƯỚC 1: GỬI SANG AI PYTHON CHECK ---
-                        memoryStream.Position = 0; // Tua về đầu file
-                        var (isValid, reason) = await ValidateImageWithAi(memoryStream, entry.Name);
-
-                        if (!isValid)
-                        {
-                            // Nếu AI bảo "Đây là ảnh phong cảnh" -> TỪ CHỐI
-                            results.Add(new { 
-                                FileName = entry.Name, 
-                                Status = "Rejected", 
-                                Error = reason 
-                            });
-                            continue; // Bỏ qua ảnh này, nhảy sang ảnh tiếp theo
-                        }
-
-                        // --- BƯỚC 2: UPLOAD LÊN CLOUD ---
-                        memoryStream.Position = 0; // Tua lại về đầu để upload
+                        memoryStream.Position = 0;
                         var uploadResult = await _uploader.UploadStreamAsync(memoryStream, entry.Name);
 
                         if (!string.IsNullOrEmpty(uploadResult.Url))
                         {
-                            // Lưu Metadata vào DB
                             var image = new ImageMetadata(patientId, clinicId, uploadResult.Url, uploadResult.PublicId);
                             _context.Images.Add(image);
-                            
-                            results.Add(new { 
-                                FileName = entry.Name, 
-                                Status = "Success", 
-                                Url = uploadResult.Url 
-                            });
+                            results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadResult.Url, AiNote = "AI Passed" });
                             successCount++;
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    results.Add(new { FileName = entry.Name, Status = "Failed", Error = ex.Message });
-                }
+                catch (Exception ex) { results.Add(new { FileName = entry.Name, Status = "Failed", Error = ex.Message }); }
             }
         }
 
-        // 3. Commit dữ liệu vào Database
-        if (successCount > 0)
+        if (successCount > 0) 
         {
             await _context.SaveChangesAsync();
+            // ==> Gửi thông báo sau khi lưu thành công
+            await NotifyUploadSuccess(patientId, successCount);
         }
         
-        return Ok(new { 
-            Message = $"Hoàn tất. Thành công: {successCount}, Bị từ chối/Lỗi: {results.Count - successCount}", 
-            Details = results 
-        });
+        return Ok(new { Message = $"Hoàn tất. Thành công: {successCount}", Details = results });
     }
 
-    // --- API 3: Thống kê (Giữ nguyên code cũ) ---
+    // --- 2. API UPLOAD ĐƠN LẺ ---
+    [HttpPost("upload")]
+    public async Task<IActionResult> Upload([FromForm] UploadImageRequest request)
+    {
+        if (request.File == null || request.File.Length == 0) return BadRequest("File rỗng");
+        var results = new List<object>(); 
+
+        // 1. Check AI
+        var (isValid, reason) = await ValidateImageWithAi(request.File.FileName);
+        if (!isValid) 
+        {
+            results.Add(new { FileName = request.File.FileName, Status = "Rejected", Error = reason });
+            return Ok(new { Message = "Ảnh bị từ chối bởi AI", Details = results });
+        }
+
+        try 
+        {
+            // 2. Upload & Lưu DB
+            var result = await _uploader.UploadAsync(request.File);
+            var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
+            _context.Images.Add(image);
+            await _context.SaveChangesAsync();
+
+            // ==> Gửi thông báo
+            await NotifyUploadSuccess(request.PatientId, 1);
+
+            results.Add(new { FileName = request.File.FileName, Status = "Success", Url = result.Url, AiNote = "AI Passed" });
+            return Ok(new { Message = "Upload thành công", Details = results });
+        }
+        catch (Exception ex)
+        {
+            results.Add(new { FileName = request.File.FileName, Status = "Failed", Error = ex.Message });
+            return StatusCode(500, new { Message = "Lỗi Server", Details = results });
+        }
+    }
+
+    // --- 3. API THỐNG KÊ ---
     [HttpGet("stats/{clinicId}")]
     public async Task<IActionResult> GetClinicStats(Guid clinicId)
     {
         var totalImages = await _context.Images.CountAsync(i => i.ClinicId == clinicId);
-        var recentUploads = await _context.Images
-            .Where(i => i.ClinicId == clinicId)
-            .OrderByDescending(i => i.UploadedAt)
-            .Take(5)
-            .Select(i => new { i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm") })
-            .ToListAsync();
-
-        var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
-        var rawData = await _context.Images
-            .Where(i => i.ClinicId == clinicId && i.UploadedAt >= sevenDaysAgo)
-            .ToListAsync(); 
-
-        var chartData = rawData
-            .GroupBy(i => i.UploadedAt.Date)
-            .Select(g => new { Date = g.Key.ToString("dd/MM"), Count = g.Count() })
-            .OrderBy(x => x.Date)
-            .ToList();
-
-        return Ok(new { ClinicId = clinicId, Summary = new { TotalScans = totalImages }, RecentActivity = recentUploads, ChartData = chartData });
+        var recentUploads = await _context.Images.Where(i => i.ClinicId == clinicId).OrderByDescending(i => i.UploadedAt).Take(5)
+            .Select(i => new { i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm") }).ToListAsync();
+        
+        return Ok(new { Summary = new { TotalScans = totalImages }, RecentActivity = recentUploads });
     }
 
-    // --- API 4: AI Dummy (Giữ nguyên code cũ) ---
-    [HttpPost("analyze-dummy/{imageId}")]
-    public async Task<IActionResult> SimulateAiAnalysis(Guid imageId)
+    // --- 4. LẤY ẢNH BỆNH NHÂN ---
+    [HttpGet("patient/{patientId}")]
+    public async Task<IActionResult> GetImagesByPatient(Guid patientId)
     {
-        var image = await _context.Images.FirstOrDefaultAsync(x => x.Id == imageId);
-        if (image == null) return NotFound("Không tìm thấy ảnh.");
+        var images = await _context.Images.Where(i => i.PatientId == patientId).OrderByDescending(i => i.UploadedAt)
+            .Select(i => new { i.Id, i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm"), FileName = "Ảnh đáy mắt" }).ToListAsync();
+        return Ok(images);
+    }
 
-        await Task.Delay(2000); // Giả lập delay
-
-        var random = new Random();
-        bool isSick = random.NextDouble() > 0.5;
-        var result = new AiAnalysisResultDto
-        {
-            Diagnosis = isSick ? "Phát hiện dấu hiệu Glaucoma" : "Mắt bình thường",
-            RiskLevel = isSick ? "High" : "Low",
-            ConfidenceScore = Math.Round(random.NextDouble() * 0.3 + 0.7, 2),
-            DoctorNotes = isSick ? "Cần chuyển tuyến trên." : "Tái khám sau 6 tháng."
-        };
-
-        try 
-        {
-            image.UpdateAiResult(JsonSerializer.Serialize(result));
-            await _context.SaveChangesAsync();
-        }
-        catch (Exception ex) { return BadRequest(ex.Message); }
-
-        return Ok(new { Message = "Phân tích AI hoàn tất.", Data = result });
+    // --- 5. XÓA ẢNH ---
+    [HttpDelete("{imageId}")]
+    public async Task<IActionResult> DeleteImage(Guid imageId)
+    {
+        var image = await _context.Images.FindAsync(imageId);
+        if (image == null) return NotFound(new { Message = "Không tìm thấy ảnh" });
+        _context.Images.Remove(image);
+        await _context.SaveChangesAsync();
+        return Ok(new { Message = "Đã xóa ảnh thành công" });
     }
 }

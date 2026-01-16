@@ -1,254 +1,356 @@
-// src/modules/ClinicWebApp/pages/Upload/ClinicUploadPage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import imagingApi from "../../../../api/imagingApi"; 
-import "./ClinicUploadPage.css"; // Import file CSS ở Bước 1
+import medicalApi from "../../../../api/medicalApi"; // [MỚI] Import API Medical
+import "./ClinicUploadPage.css"; 
 
 const ClinicUploadPage = () => {
-  // --- 1. STATE QUẢN LÝ GIAO DIỆN ---
-  const [activeTab, setActiveTab] = useState("upload"); // Tab hiện tại: 'upload', 'validation', 'storage'...
-  const [activeUploadMode, setActiveUploadMode] = useState("single"); // 'single' hoặc 'batch'
+  // --- STATE ---
+  const [activeTab, setActiveTab] = useState("upload"); 
+  const [activeUploadMode, setActiveUploadMode] = useState("single"); 
   
-  // --- 2. STATE DỮ LIỆU ---
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState([]); // Kết quả upload
-  const [stats, setStats] = useState(null);   // Số liệu thống kê từ API
+  const [uploadResults, setUploadResults] = useState([]); 
+  
+  // DỮ LIỆU THẬT
+  const [stats, setStats] = useState(null); 
+  const [patientImages, setPatientImages] = useState([]); 
+  const [isLoadingImages, setIsLoadingImages] = useState(false);
 
-  // ID Giả lập (Sau này lấy từ Login User)
-  const TEST_CLINIC_ID = "d2b51336-6c1c-426d-881e-45051666617a";
-  const TEST_PATIENT_ID = "a3b51336-6c1c-426d-881e-45051666617b";
+  // [MỚI] DỮ LIỆU BỆNH NHÂN TỪ SERVICE KHÁC
+  const [patients, setPatients] = useState([]);
+  const [selectedPatientId, setSelectedPatientId] = useState("");
 
-  // --- 3. GỌI API LẤY THỐNG KÊ (Khi mới vào trang) ---
-  useEffect(() => {
-    fetchStats();
-  }, []);
+  // Clinic ID vẫn có thể giữ cứng hoặc lấy từ Login Token
+  const CURRENT_CLINIC_ID = "d2b51336-6c1c-426d-881e-45051666617a";
 
-  const fetchStats = async () => {
+  // --- API CALLS ---
+  
+  // 1. Lấy danh sách bệnh nhân từ Medical Record Service (Port 5002)
+  const fetchPatients = useCallback(async () => {
     try {
-      const data = await imagingApi.getStats(TEST_CLINIC_ID);
-      setStats(data);
-    } catch (error) {
-      console.error("Lỗi tải thống kê:", error);
-    }
-  };
+        const data = await medicalApi.getAllPatients();
+        // Kiểm tra cấu trúc data trả về (tùy thuộc vào Controller bên Medical)
+        const patientList = Array.isArray(data) ? data : (data.data || []);
+        setPatients(patientList);
 
-  // --- 4. XỬ LÝ UPLOAD ---
+        // Mặc định chọn người đầu tiên nếu chưa chọn
+        if (patientList.length > 0 && !selectedPatientId) {
+            setSelectedPatientId(patientList[0].id);
+        }
+    } catch (error) {
+        console.error("Lỗi kết nối Medical Record Service:", error);
+    }
+  }, [selectedPatientId]);
+
+  // 2. Lấy thống kê
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await imagingApi.getStats(CURRENT_CLINIC_ID);
+      setStats(data);
+    } catch (error) { console.error("Lỗi tải thống kê:", error); }
+  }, [CURRENT_CLINIC_ID]);
+
+  // 3. Lấy danh sách ảnh của BỆNH NHÂN ĐANG CHỌN
+  const fetchPatientImages = useCallback(async () => {
+    if (!selectedPatientId) return;
+    
+    setIsLoadingImages(true);
+    try {
+      const data = await imagingApi.getImagesByPatient(selectedPatientId);
+      if (Array.isArray(data)) setPatientImages(data);
+      else if (data && data.data) setPatientImages(data.data);
+      else setPatientImages([]);
+    } catch (error) {
+        setPatientImages([]);
+    } finally {
+        setIsLoadingImages(false);
+    }
+  }, [selectedPatientId]);
+
+  // --- EFFECTS ---
+  // Load dữ liệu ban đầu
+  useEffect(() => {
+    fetchPatients(); 
+    fetchStats();
+  }, [fetchPatients, fetchStats]);
+
+  // Khi chuyển tab Storage hoặc đổi Bệnh nhân -> Load ảnh của người đó
+  useEffect(() => {
+    if (activeTab === 'storage' && selectedPatientId) {
+        fetchPatientImages();
+    }
+  }, [activeTab, selectedPatientId, fetchPatientImages]);
+
+  // --- EVENT HANDLERS ---
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) setSelectedFile(file);
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile) return alert("Vui lòng chọn file!");
+    if (!selectedPatientId) return alert("Vui lòng chọn Bệnh nhân!");
+
     setLoading(true);
+    setUploadResults([]); 
     
     try {
-      // Logic Upload: Nếu là Batch (Zip) thì gọi API Batch, nếu Single thì gọi API Single
       let res;
+      // Gửi kèm ID bệnh nhân thật vừa chọn từ Dropdown
       if (activeUploadMode === 'batch') {
-          // Gọi API Batch Upload (Service 2)
-          res = await imagingApi.batchUpload(selectedFile, TEST_CLINIC_ID, TEST_PATIENT_ID);
-          setResults(res.details || []); // Lưu danh sách file trả về để hiện bảng
+          res = await imagingApi.batchUpload(selectedFile, CURRENT_CLINIC_ID, selectedPatientId);
       } else {
-          // Gọi API Single Upload (Service 1) - Tạm thời gọi Batch cho demo nếu chưa có API Single
-          alert("Đang xử lý ảnh đơn... (Demo)");
-          res = { message: "Upload thành công (Demo)" };
+          res = await imagingApi.uploadSingle(selectedFile, CURRENT_CLINIC_ID, selectedPatientId);
       }
 
-      alert(`✅ ${res.message}`);
-      fetchStats(); // Refresh lại số liệu Dashboard
+      if (res && (res.details || res.Details)) setUploadResults(res.details || res.Details);
+      alert(`✅ ${res.message || "Xử lý thành công!"}`);
+      
+      // Refresh dữ liệu
+      fetchStats(); 
+      if (activeTab === 'storage') fetchPatientImages();
+
     } catch (err) {
-      alert("❌ Lỗi: " + (err.response?.data || err.message));
+      console.error(err);
+      if (err.response && err.response.data && err.response.data.details) {
+         setUploadResults(err.response.data.details);
+         alert("⚠️ Có ảnh bị từ chối.");
+      } else {
+         alert("❌ Lỗi hệ thống: " + (err.message || "Unknown"));
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // --- 5. RENDER GIAO DIỆN (Chia nhỏ function cho gọn) ---
+  const handleDeleteImage = async (imageId) => {
+      if(!window.confirm("Xác nhận xóa ảnh này?")) return;
+      try {
+          await imagingApi.deleteImage(imageId);
+          alert("Đã xóa thành công.");
+          fetchPatientImages();
+          fetchStats();
+      } catch (error) { alert("Lỗi khi xóa: " + error.message); }
+  }
 
-  // Phần Menu bên trái (Sidebar Navigation)
-  const renderSidebar = () => (
-    <div className="services-nav">
-      {[
-        { id: "upload", icon: "fa-cloud-upload-alt", label: "Upload & Quản lý" },
-        { id: "validation", icon: "fa-robot", label: "Kiểm duyệt AI" },
-        { id: "storage", icon: "fa-database", label: "Lưu trữ Đám mây" },
-        { id: "metadata", icon: "fa-info-circle", label: "Quản lý Metadata" },
-        { id: "analytics", icon: "fa-chart-bar", label: "Thống kê Dashboard" },
-      ].map((item) => (
-        <div
-          key={item.id}
-          className={`nav-item ${activeTab === item.id ? "active" : ""}`}
-          onClick={() => setActiveTab(item.id)}
-        >
-          <i className={`fas ${item.icon}`}></i>
-          {item.label}
-        </div>
-      ))}
-    </div>
+  // --- RENDER HELPERS ---
+
+  // Component chọn bệnh nhân (Dropdown)
+  const renderPatientSelector = () => (
+      <div style={{
+          background: '#e0f2fe', 
+          padding: '15px 20px', 
+          borderRadius: '12px', 
+          marginBottom: '20px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '15px', 
+          border: '1px solid #bae6fd',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+      }}>
+          <div style={{fontWeight: '700', color: '#0369a1', minWidth: '160px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <i className="fas fa-user-injured"></i> Chọn Bệnh Nhân:
+          </div>
+          <select 
+            className="form-select" 
+            value={selectedPatientId} 
+            onChange={(e) => setSelectedPatientId(e.target.value)}
+            style={{
+                flex: 1, 
+                padding: '10px 15px', 
+                borderRadius: '8px', 
+                border: '1px solid #cbd5e1', 
+                fontSize: '15px',
+                outline: 'none',
+                cursor: 'pointer'
+            }}
+          >
+              <option value="">-- Vui lòng chọn hồ sơ bệnh nhân --</option>
+              {patients.map(p => (
+                  <option key={p.id} value={p.id}>
+                      {p.fullName} - {p.phoneNumber || "SĐT: N/A"} (ID: {p.id.substring(0,6)}...)
+                  </option>
+              ))}
+          </select>
+          <div style={{fontSize: '12px', color: '#0284c7', fontStyle: 'italic'}}>
+             <i className="fas fa-database"></i> Medical Record DB
+          </div>
+      </div>
   );
 
-  // Tab 1: Upload (Giao diện chính)
-  const renderUploadTab = () => (
-    <div className="service-content active">
-      <div className="service-header">
-        <div>
-          <h2 className="service-title">
-            <i className="fas fa-cloud-upload-alt"></i> Upload & Quản lý Hình ảnh
-          </h2>
-          <p className="service-subtitle">Tải lên và xử lý hình ảnh y tế tự động</p>
+  const renderSidebar = () => {
+    const menuItems = [
+        { id: "upload", icon: "fa-cloud-upload-alt", label: "Upload & AI" },
+        { id: "storage", icon: "fa-database", label: "Kho dữ liệu" },
+        { id: "validation", icon: "fa-history", label: "Lịch sử gần đây" },
+        { id: "analytics", icon: "fa-chart-pie", label: "Thống kê" },
+    ];
+    return (
+        <div className="services-nav">
+            <div className="nav-group-title">Menu Chức năng</div>
+            {menuItems.map(item => (
+                <div key={item.id} className={`nav-item ${activeTab === item.id ? "active" : ""}`} onClick={() => setActiveTab(item.id)}>
+                    <i className={`fas ${item.icon}`}></i> {item.label}
+                </div>
+            ))}
         </div>
-        <div className="service-stats">
-          <div className="stat-item">
-            {/* SỐ LIỆU THẬT TỪ DATABASE */}
-            <div className="stat-value">{stats?.summary?.totalScans || 0}</div>
-            <div className="stat-label">Tổng ảnh đã xử lý</div>
-          </div>
-        </div>
-      </div>
+    );
+  };
 
-      {/* Khu vực chọn chế độ Single / Batch */}
-      <div className="upload-sections">
-        {/* Box 1: Single Upload */}
-        <div 
-            className={`upload-section ${activeUploadMode === 'single' ? 'active' : ''}`}
-            onClick={() => setActiveUploadMode('single')}
-        >
-          <div className="upload-header">
-            <div className="upload-icon"><i className="fas fa-file-image"></i></div>
-            <h3 className="upload-title">Upload Đơn lẻ</h3>
-          </div>
-          <div className="upload-zone">
-             <i className="fas fa-file-image zone-icon"></i>
-             <div className="zone-text">Chọn ảnh .JPG, .PNG</div>
-             {activeUploadMode === 'single' && (
-                 <input type="file" onChange={handleFileChange} accept="image/*" />
-             )}
-          </div>
-        </div>
-
-        {/* Box 2: Batch Upload */}
-        <div 
-            className={`upload-section ${activeUploadMode === 'batch' ? 'active' : ''}`}
-            onClick={() => setActiveUploadMode('batch')}
-        >
-          <div className="upload-header">
-            <div className="upload-icon"><i className="fas fa-file-archive"></i></div>
-            <h3 className="upload-title">Upload Hàng loạt (ZIP)</h3>
-          </div>
-          <div className="upload-zone">
-             <i className="fas fa-box-open zone-icon"></i>
-             <div className="zone-text">Chọn file .ZIP</div>
-             {activeUploadMode === 'batch' && (
-                 <input type="file" onChange={handleFileChange} accept=".zip" />
-             )}
-          </div>
-        </div>
-      </div>
-
-      {/* Nút Upload Chính */}
-      <div style={{textAlign: 'center', marginTop: '20px'}}>
-          <button className="btn btn-primary" onClick={handleUpload} disabled={!selectedFile || loading}>
-              {loading ? <><i className="fas fa-spinner fa-spin"></i> Đang xử lý...</> : <><i className="fas fa-upload"></i> Bắt đầu Upload & Phân tích</>}
-          </button>
-      </div>
-
-      {/* Hiển thị kết quả sau khi upload (Nếu có) */}
-      {results.length > 0 && (
-          <div className="results-section active" style={{marginTop: '30px'}}>
-              <h3 className="section-title">Kết quả vừa xử lý</h3>
-              <table className="results-table">
-                  <thead>
-                      <tr>
-                          <th>Tên file</th>
-                          <th>Trạng thái</th>
-                          <th>Link ảnh</th>
-                          <th>Ghi chú</th>
-                      </tr>
-                  </thead>
-                  <tbody>
-                      {results.map((item, idx) => (
-                          <tr key={idx}>
-                              <td>{item.fileName}</td>
-                              <td>
-                                  <span className={`status-badge ${item.status === 'Success' ? 'success' : 'error'}`}>
-                                      {item.status}
-                                  </span>
-                              </td>
-                              <td>
-                                  {item.url ? <a href={item.url} target="_blank" rel="noreferrer">Xem ảnh</a> : '-'}
-                              </td>
-                              <td>{item.error || 'Đã lưu DB'}</td>
-                          </tr>
-                      ))}
-                  </tbody>
-              </table>
-          </div>
-      )}
-    </div>
-  );
-
-  // Tab 5: Analytics Dashboard (Dùng dữ liệu thật)
-  const renderAnalyticsTab = () => (
-    <div className="service-content active">
-        <h2 className="service-title"><i className="fas fa-chart-bar"></i> Thống kê Dashboard</h2>
-        
-        <div className="stats-grid" style={{marginTop: '20px'}}>
-            <div className="stat-card">
-                <div className="stat-number">{stats?.summary?.totalScans || 0}</div>
-                <div className="stat-desc">Tổng ca chụp</div>
-            </div>
-            {/* Các thẻ khác có thể thêm vào sau */}
-        </div>
-
-        <div className="dashboard-card large" style={{marginTop: '20px'}}>
-            <div className="card-header">
-                <h4 className="card-title">Hoạt động gần đây (Lấy từ DB)</h4>
-            </div>
-            <ul className="activity-list">
-                {stats?.recentActivity?.map((act, idx) => (
-                    <li key={idx} className="activity-item">
-                        <div className="activity-icon upload"><i className="fas fa-image"></i></div>
-                        <div className="activity-details">
-                            <div className="activity-title">Ảnh mới được tải lên</div>
-                            <div className="activity-time">{act.uploadedAt} • <a href={act.imageUrl} target="_blank" rel="noreferrer">Xem</a></div>
-                        </div>
-                    </li>
-                ))}
-                {(!stats?.recentActivity || stats.recentActivity.length === 0) && <p>Chưa có dữ liệu.</p>}
-            </ul>
-        </div>
-    </div>
-  );
-
-  // --- RENDER CHÍNH ---
+  // --- MAIN RENDER ---
   return (
     <div className="container">
-      {/* Header */}
       <div className="header">
-        <div className="logo">
-          <div className="logo-icon"></div>
-          <div className="logo-text">
-            <h1>AURA SCREENING</h1>
-            <p>Phân hệ Chẩn đoán hình ảnh (Imaging Service)</p>
-          </div>
+        <div className="logo-text"><h1>AURA IMAGING SUITE</h1></div>
+        <div style={{display: 'flex', gap: '10px'}}>
+             <span className="badge success"><i className="fas fa-link"></i> Integrated System</span>
         </div>
       </div>
 
       <div className="main-content">
-        {/* Sidebar Nav */}
         {renderSidebar()}
-
-        {/* Nội dung chính thay đổi theo Tab */}
+        
         <div className="services-container">
-            {activeTab === 'upload' && renderUploadTab()}
-            {activeTab === 'analytics' && renderAnalyticsTab()}
-            
-            {/* Các tab khác (Validation, Storage...) bạn có thể copy HTML tĩnh vào đây để hiển thị minh họa */}
-            {(activeTab === 'validation' || activeTab === 'storage' || activeTab === 'metadata') && (
-                <div style={{textAlign: 'center', padding: '50px'}}>
-                    <h3>Tính năng này đang được tích hợp với Backend...</h3>
-                    <p>Vui lòng thử tính năng <b>Upload</b> và <b>Thống kê</b> trước.</p>
+            {/* Luôn hiện thanh chọn bệnh nhân ở Tab Upload và Storage */}
+            {(activeTab === 'upload' || activeTab === 'storage') && renderPatientSelector()}
+
+            {/* TAB UPLOAD */}
+            {activeTab === 'upload' && (
+                <div className="service-content active">
+                    <div className="section-header-wrapper">
+                        <div>
+                            <h2 className="section-title-main">Upload Hình ảnh</h2>
+                            <p className="section-subtitle">Tải ảnh lên cho bệnh nhân đã chọn</p>
+                        </div>
+                    </div>
+
+                    <div className="upload-grid">
+                        <div className={`upload-card ${activeUploadMode === 'single' ? 'active' : ''}`} onClick={() => setActiveUploadMode('single')}>
+                            <div className="upload-card-inner">
+                                <div className="upload-card-header">
+                                    <div className="upload-card-icon"><i className="fas fa-image"></i></div>
+                                    <div className="upload-card-title"><h3>Upload Đơn lẻ</h3><p>.jpg, .png</p></div>
+                                </div>
+                                <div className="dropzone">
+                                    {activeUploadMode === 'single' && <input type="file" onChange={handleFileChange} accept="image/*" />}
+                                    <i className="fas fa-cloud-upload-alt dropzone-icon"></i><div>Chọn 1 ảnh</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`upload-card ${activeUploadMode === 'batch' ? 'active' : ''}`} onClick={() => setActiveUploadMode('batch')}>
+                            <div className="upload-card-inner">
+                                <div className="upload-card-header">
+                                    <div className="upload-card-icon"><i className="fas fa-file-archive"></i></div>
+                                    <div className="upload-card-title"><h3>Upload Zip</h3><p>Nén nhiều ảnh</p></div>
+                                </div>
+                                <div className="dropzone">
+                                    {activeUploadMode === 'batch' && <input type="file" onChange={handleFileChange} accept=".zip" />}
+                                    <i className="fas fa-box-open dropzone-icon"></i><div>Chọn file .ZIP</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{textAlign: 'center', marginBottom: '30px'}}>
+                        <button className="btn-modern" onClick={handleUpload} disabled={!selectedFile || !selectedPatientId || loading}>
+                            {loading ? "Đang xử lý..." : "Bắt đầu Upload"}
+                        </button>
+                    </div>
+
+                    {uploadResults.length > 0 && (
+                        <div className="modern-table-container">
+                             <table className="modern-table">
+                                <thead><tr><th>Tên file</th><th>Kết quả</th><th>Chi tiết</th><th>Link</th></tr></thead>
+                                <tbody>
+                                    {uploadResults.map((item, idx) => (
+                                        <tr key={idx}>
+                                            <td>{item.fileName}</td>
+                                            <td>{item.status === 'Success' ? <span className="badge success">Thành công</span> : <span className="badge danger">Từ chối</span>}</td>
+                                            <td>{item.aiNote || item.error || item.Error}</td>
+                                            <td>{item.url ? <a href={item.url} target="_blank" rel="noreferrer" className="modern-link">Xem</a> : "-"}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TAB STORAGE */}
+            {activeTab === 'storage' && (
+                <div className="service-content active">
+                    <div className="section-header-wrapper">
+                        <div>
+                            <h2 className="section-title-main">Thư viện ảnh</h2>
+                            <p className="section-subtitle">
+                                {selectedPatientId 
+                                    ? `Bệnh nhân: ${patients.find(p => p.id === selectedPatientId)?.fullName || "Unknown"}` 
+                                    : "Vui lòng chọn bệnh nhân ở trên"}
+                            </p>
+                        </div>
+                        <button className="btn-modern" onClick={fetchPatientImages}><i className="fas fa-sync"></i> Refresh</button>
+                    </div>
+
+                    {isLoadingImages ? ( <div style={{textAlign: 'center', padding: '50px'}}>Đang tải dữ liệu...</div> ) 
+                    : patientImages.length === 0 ? ( <div style={{textAlign: 'center', padding: '50px', color: '#666'}}>Chưa có ảnh nào.</div> ) 
+                    : (
+                        <div className="image-gallery-grid">
+                            {patientImages.map((img) => (
+                                <div key={img.id} className="gallery-item">
+                                    <div className="gallery-thumb"><img src={img.imageUrl} alt="Scan" loading="lazy" /></div>
+                                    <div className="gallery-info">
+                                        <div className="gallery-filename">{img.fileName || "Ảnh đáy mắt"}</div>
+                                        <div className="gallery-date"><i className="far fa-clock"></i> {img.uploadedAt}</div>
+                                        <div className="gallery-actions">
+                                            <a href={img.imageUrl} target="_blank" rel="noreferrer" className="modern-link">Full HD</a>
+                                            <button className="btn-danger" onClick={() => handleDeleteImage(img.id)}>Xóa</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TAB VALIDATION (Lịch sử) */}
+            {activeTab === 'validation' && (
+                <div className="service-content active">
+                     <h3>Hoạt động gần đây (Toàn hệ thống)</h3>
+                     <div className="modern-table-container">
+                        <table className="modern-table">
+                            <thead><tr><th>Thời gian</th><th>Ảnh</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                            <tbody>
+                                {stats?.recentActivity?.map((act, idx) => (
+                                    <tr key={idx}>
+                                        <td>{act.uploadedAt}</td>
+                                        <td><img src={act.imageUrl} alt="thumb" style={{width: 40, height: 40, objectFit: 'cover', borderRadius: 4}}/></td>
+                                        <td><span className="badge success">Đã lưu</span></td>
+                                        <td><a href={act.imageUrl} target="_blank" rel="noreferrer" className="modern-link">Xem</a></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                     </div>
+                </div>
+            )}
+
+            {/* TAB ANALYTICS */}
+            {activeTab === 'analytics' && (
+                <div className="service-content active">
+                    <h3>Thống kê hệ thống</h3>
+                    <div className="stats-grid">
+                        <div className="stat-card">
+                            <div className="stat-icon blue"><i className="fas fa-database"></i></div>
+                            <div className="stat-info"><h4>Tổng ảnh lưu trữ</h4><div className="stat-value">{stats?.summary?.totalScans || 0}</div></div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-icon green"><i className="fas fa-check-circle"></i></div>
+                            <div className="stat-info"><h4>Trạng thái</h4><div style={{fontSize: 14, color: '#666'}}>Hoạt động ổn định</div></div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
