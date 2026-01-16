@@ -89,4 +89,3 @@ public class Examination : Entity
         if (_state == null) LoadState();
         _state.VerifyByDoctor(this, doctorNotes, finalResult);
     }
-}
