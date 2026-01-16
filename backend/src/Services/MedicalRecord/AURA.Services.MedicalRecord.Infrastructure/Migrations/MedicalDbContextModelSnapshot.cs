@@ -52,9 +52,36 @@ namespace AURA.Services.MedicalRecord.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.ToTable("Examinations");
+                });
+
+            modelBuilder.Entity("AURA.Services.MedicalRecord.Domain.Entities.MedicalHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Condition")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("DiagnosedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
                     b.HasIndex("PatientId");
 
-                    b.ToTable("Examinations");
+                    b.ToTable("MedicalHistories");
                 });
 
             modelBuilder.Entity("AURA.Services.MedicalRecord.Domain.Entities.Patient", b =>
@@ -72,7 +99,8 @@ namespace AURA.Services.MedicalRecord.Infrastructure.Migrations
 
                     b.Property<string>("FullName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("Gender")
                         .IsRequired()
@@ -80,23 +108,32 @@ namespace AURA.Services.MedicalRecord.Infrastructure.Migrations
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
                     b.ToTable("Patients");
                 });
 
-            modelBuilder.Entity("AURA.Services.MedicalRecord.Domain.Entities.Examination", b =>
+            modelBuilder.Entity("AURA.Services.MedicalRecord.Domain.Entities.MedicalHistory", b =>
                 {
                     b.HasOne("AURA.Services.MedicalRecord.Domain.Entities.Patient", null)
-                        .WithMany()
+                        .WithMany("MedicalHistories")
                         .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("AURA.Services.MedicalRecord.Domain.Entities.Patient", b =>
+                {
+                    b.Navigation("MedicalHistories");
                 });
 #pragma warning restore 612, 618
         }
