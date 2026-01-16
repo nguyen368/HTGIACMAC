@@ -1,34 +1,43 @@
-using AURA.Services.Billing.Domain.Entities;
-using AURA.Services.Billing.Infrastructure.Data;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-namespace AURA.Services.Billing.API.Controllers;
-
-[ApiController]
-[Route("api/bills")]
-public class BillsController : ControllerBase
+[HttpPost]
+public async Task<IActionResult> CreateBill([FromBody] CreateBillRequest request)
 {
-    private readonly BillingDbContext _context;
-
-    public BillsController(BillingDbContext context)
+    // 1. Tạo hóa đơn mới
+    var newBill = new Bill
     {
-        _context = context;
+        PatientId = request.PatientId,
+        Status = "Pending"
+    };
+
+    // 2. Add các dịch vụ vào hóa đơn
+    foreach (var item in request.Items)
+    {
+        newBill.Items.Add(new BillItem
+        {
+            ServiceName = item.ServiceName,
+            Price = item.Price, // Trong thực tế, giá này nên lấy từ DB Bảng Giá (PriceTable)
+            Quantity = item.Quantity
+        });
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create(Guid patientId, decimal amount)
-    {
-        var bill = new Bill(patientId, amount);
-        _context.Bills.Add(bill);
-        await _context.SaveChangesAsync();
-        return Ok(bill);
-    }
+    // 3. GỌI LOGIC TÍNH TỔNG TIỀN (Quan trọng!)
+    newBill.CalculateTotal();
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var bills = await _context.Bills.ToListAsync();
-        return Ok(bills);
-    }
+    // 4. Lưu vào Database
+    _context.Bills.Add(newBill);
+    await _context.SaveChangesAsync();
+
+    return Ok(newBill);
+}
+
+// Class DTO để nhận dữ liệu từ UI
+public class CreateBillRequest
+{
+    public Guid PatientId { get; set; }
+    public List<BillItemDto> Items { get; set; }
+}
+public class BillItemDto 
+{
+    public string ServiceName { get; set; }
+    public decimal Price { get; set; }
+    public int Quantity { get; set; }
 }
