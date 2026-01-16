@@ -9,7 +9,7 @@ services:
       - POSTGRES_PASSWORD=zxc123456
       - POSTGRES_DB=aura_identity_db # DB mặc định
     ports:
-      - "5432:5432" # Map ra ngoài để debug local
+      - "5435:5432" # Map ra ngoài để debug local
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql # Script tạo các DB khác (Medical, Billing...)
