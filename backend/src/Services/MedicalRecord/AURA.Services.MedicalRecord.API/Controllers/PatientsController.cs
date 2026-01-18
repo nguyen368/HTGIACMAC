@@ -11,7 +11,7 @@ namespace AURA.Services.MedicalRecord.API.Controllers;
 
 [ApiController]
 [Route("api/patients")]
-[Authorize] // 🛡️ Bảo vệ toàn bộ Controller (Yêu cầu phải có Token đăng nhập)
+[Authorize]
 public class PatientsController : ControllerBase
 {
     private readonly MedicalDbContext _context;
@@ -73,15 +73,17 @@ public class PatientsController : ControllerBase
             .AsNoTracking() // Tối ưu đọc
             .FirstOrDefaultAsync(p => p.UserId == userId);
 
+        // Nếu chưa có hồ sơ, trả về 404 hoặc null tùy logic FE, ở đây return NotFound để FE biết redirect
         if (patient == null) return NotFound("Chưa cập nhật hồ sơ y tế.");
 
         return Ok(patient);
     }
 
-    // [PUT] api/patients/me -> Cập nhật thông tin
+    // [PUT] api/patients/me -> Cập nhật thông tin (Đã giữ logic UPSERT của bạn)
     [HttpPut("me")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdatePatientProfileRequest request)
     {
+        // 1. Validate
         var validationResult = await _validator.ValidateAsync(request);
         if (!validationResult.IsValid)
         {
@@ -89,16 +91,28 @@ public class PatientsController : ControllerBase
         }
 
         var userId = GetUserIdFromToken();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        // 2. Tìm hồ sơ trong DB
         var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
         
-        if (patient == null) return NotFound("Hồ sơ không tồn tại.");
-
+        // Chuẩn hóa ngày sinh sang UTC
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
-        
-        // Gọi method của Domain Entity để update (DDD)
-        patient.UpdateInfo(request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
-        
-        _context.Patients.Update(patient);
+
+        // 3. Logic UPSERT (Update or Insert) - FIX QUAN TRỌNG
+        if (patient == null) 
+        {
+            // TRƯỜNG HỢP 1: Chưa có hồ sơ -> TẠO MỚI LUÔN
+            patient = new Patient(userId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+            _context.Patients.Add(patient);
+        }
+        else 
+        {
+            // TRƯỜNG HỢP 2: Đã có hồ sơ -> CẬP NHẬT
+            patient.UpdateInfo(request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+            _context.Patients.Update(patient);
+        }
+
         await _context.SaveChangesAsync();
 
         return Ok(patient);
@@ -108,7 +122,7 @@ public class PatientsController : ControllerBase
     // 2. QUẢN LÝ LỊCH SỬ (HISTORY & EXAMS)
     // =================================================================================
 
-    // [GET] api/patients/examinations -> Xem lịch sử các lần khám (Visits)
+    // [GET] api/patients/examinations -> Xem lịch sử các lần khám
     [HttpGet("examinations")]
     public async Task<IActionResult> GetExaminationHistory()
     {
@@ -126,8 +140,7 @@ public class PatientsController : ControllerBase
         return Ok(exams);
     }
 
-    // [POST] api/patients/{patientId}/history -> Thêm tiền sử bệnh (Conditions)
-    // (Method này bạn đã làm ở Tuần 1 - Tôi giữ lại để không bị mất chức năng)
+    // [POST] api/patients/{patientId}/history -> Thêm tiền sử bệnh
     [HttpPost("{patientId}/history")]
     public async Task<IActionResult> AddMedicalHistory(Guid patientId, [FromBody] AddMedicalHistoryRequest request)
     {
@@ -145,7 +158,6 @@ public class PatientsController : ControllerBase
     // 3. HELPER METHODS
     // =================================================================================
     
-    // Hàm phụ trợ để lấy ID từ Token cho gọn code
     private Guid GetUserIdFromToken()
     {
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

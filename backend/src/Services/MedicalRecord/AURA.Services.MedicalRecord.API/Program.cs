@@ -1,10 +1,13 @@
 using AURA.Services.MedicalRecord.Application.DTOs;
 using AURA.Services.MedicalRecord.Infrastructure.Data;
-using FluentValidation;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using FluentValidation;
+using FluentValidation.AspNetCore;
+using AURA.Services.MedicalRecord.Application.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,68 +17,114 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
-// A. Kết nối Database (PostgreSQL)
+// A. Kết nối Database (PostgreSQL) - Giữ nguyên
 builder.Services.AddDbContext<MedicalDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// B. Đăng ký Validator (FluentValidation)
-// Lưu ý: Nếu dòng này báo lỗi đỏ, hãy đảm bảo bạn đã có class UpdatePatientProfileRequest
-// Nếu chưa có, bạn có thể tạm thời comment dòng này lại.
-try {
-    builder.Services.AddValidatorsFromAssemblyContaining<UpdatePatientProfileRequest>();
-} catch { /* Bỏ qua nếu chưa có validator */ }
-
-// C. Cấu hình Authentication (JWT)
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "SuperSecretKey_AuraProject_2026_Minimum32Bytes";
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.RequireHttpsMetadata = false;
-        options.SaveToken = true;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ValidateIssuer = false,
-            ValidateAudience = false
-        };
-    });
-
-// D. Cấu hình CORS (QUAN TRỌNG CHO FRONTEND)
+// B. Cấu hình CORS (Dùng code của nhóm - Bảo mật hơn)
+// Chỉ cho phép React (localhost:3000) truy cập, thay vì cho tất cả như code cũ của bạn
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy => 
+    options.AddPolicy("AllowReactApp",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:3000") // Frontend của bạn chạy port này
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
+
+// C. Cấu hình Authentication (Dùng code của nhóm - Chuẩn hơn)
+// Code nhóm đọc từ appsettings.json thay vì fix cứng key
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"] ?? "Key_Mac_Dinh_Du_Phong_Cho_Dev_Moi_123456789"; // Dự phòng nếu null
+var key = Encoding.UTF8.GetBytes(secretKey);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        policy.AllowAnyOrigin()   // Chấp nhận mọi nguồn (React, Mobile...)
-              .AllowAnyMethod()   // Chấp nhận GET, POST, PUT, DELETE
-              .AllowAnyHeader();  // Chấp nhận mọi Header
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ClockSkew = TimeSpan.Zero 
+    };
+});
+
+// D. Validator (Dùng code của nhóm)
+builder.Services.AddScoped<IValidator<UpdatePatientProfileRequest>, UpdatePatientProfileValidator>();
+builder.Services.AddFluentValidationAutoValidation();
+try {
+    builder.Services.AddValidatorsFromAssemblyContaining<UpdatePatientProfileValidator>();
+} catch { /* Bỏ qua lỗi nếu chưa có validator nào */ }
+
+// E. Swagger (Dùng code của nhóm - Có nút ổ khóa Login)
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA MedicalRecord API", Version = "v1" });
+    
+    // Cấu hình nút Authorize (Ổ khóa) trên Swagger
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Nhập token theo định dạng: Bearer {token}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement()
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                },
+                Scheme = "oauth2",
+                Name = "Bearer",
+                In = ParameterLocation.Header,
+            },
+            new List<string>()
+        }
     });
 });
 
 var app = builder.Build();
 
 // ====================================================
-// 2. MIDDLEWARE PIPELINE (Thứ tự cực kỳ quan trọng)
+// 2. MIDDLEWARE PIPELINE
 // ====================================================
 
-// 1. Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// 2. CORS (BẮT BUỘC PHẢI ĐỨNG TRƯỚC AUTH)
-app.UseCors(); 
+// 1. KÍCH HOẠT CORS (Quan trọng: Phải dùng đúng tên Policy của nhóm)
+app.UseCors("AllowReactApp");
 
-// 3. Auth
+app.UseHttpsRedirection();
+
+// 2. Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 4. Controller
 app.MapControllers();
 
 app.Run();

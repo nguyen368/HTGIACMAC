@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authApi from '../../../../api/authApi'; // Đảm bảo đường dẫn này đúng với dự án của bạn
 import './AuthPage.css';
+import { useAuth } from '../../../../context/AuthContext';
 
 const AuthPage = () => {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
     const [isLoading, setIsLoading] = useState(false);
     const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -95,15 +97,25 @@ const AuthPage = () => {
 
             const data = res.data.value || res.data;
             if (data?.token) {
-                localStorage.setItem('aura_token', data.token);
-                localStorage.setItem('aura_role', data.role);
-                alert(`Đăng nhập thành công! Xin chào ${data.fullName}`);
+                await login(data);
+                alert("✅ Đăng nhập thành công!");
                 
                 // Chuyển hướng dựa trên Role
                 const role = data.role?.toLowerCase() || '';
-                if (role === 'admin') navigate('/admin');
-                else if (role === 'doctor') navigate('/doctor');
-                else navigate('/'); 
+                if (role === 'admin') {
+                    navigate('/admin');
+                } 
+                else if (role === 'doctor') {
+                    // Nếu bác sĩ cũng dùng giao diện upload giống phòng khám
+                    navigate('/clinic/upload'); 
+                }
+                else if (role === 'clinic') {
+                     navigate('/clinic/upload');
+                }
+                else {
+                    // Mặc định là Patient -> Vào Dashboard bệnh nhân
+                    navigate('/patient/dashboard'); 
+                } 
             }
         } catch (error) {
             alert('Lỗi đăng nhập: ' + (error.response?.data?.detail || "Kiểm tra lại email/mật khẩu"));
