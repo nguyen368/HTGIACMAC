@@ -1,27 +1,30 @@
 using AURA.Services.MedicalRecord.Application.DTOs;
 using FluentValidation;
 
-// Namespace chuẩn:
 namespace AURA.Services.MedicalRecord.Application.Validators;
 
 public class UpdatePatientProfileValidator : AbstractValidator<UpdatePatientProfileRequest>
 {
     public UpdatePatientProfileValidator()
     {
-        RuleFor(x => x.FullName).NotEmpty().WithMessage("Tên không được để trống");
-        RuleFor(x => x.DateOfBirth).LessThan(DateTime.UtcNow).WithMessage("Ngày sinh không hợp lệ");
-        RuleFor(x => x.PhoneNumber).Matches(@"^0\d{9}$").WithMessage("SĐT không đúng định dạng");
-        RuleFor(x => x.Gender)
-    .NotEmpty().WithMessage("Giới tính không được để trống")
-    .Must(g => g == "Nam" || g == "Nữ" || g == "Khác")
-    .WithMessage("Giới tính chỉ chấp nhận: 'Nam', 'Nữ', hoặc 'Khác'");
-    RuleFor(x => x.Address)
-    .MaximumLength(500).WithMessage("Địa chỉ không được quá 500 ký tự");
-    }
+        // Tên: Bắt buộc, tối thiểu 2 ký tự
+        RuleFor(x => x.FullName)
+            .NotEmpty().WithMessage("Vui lòng nhập họ và tên.")
+            .MinimumLength(2).WithMessage("Tên quá ngắn (tối thiểu 2 ký tự).")
+            .MaximumLength(100).WithMessage("Họ tên quá dài.");
 
-    private bool BeAValidAge(DateTime dob)
-    {
-        var age = DateTime.UtcNow.Year - dob.Year;
-        return age <= 150 && age >= 0;
+        // Ngày sinh: Bắt buộc, nhỏ hơn hiện tại
+        RuleFor(x => x.DateOfBirth)
+            .NotEmpty().WithMessage("Vui lòng chọn ngày sinh.")
+            .LessThan(DateTime.UtcNow).WithMessage("Ngày sinh không hợp lệ.");
+
+        // SĐT: Bắt buộc, đúng định dạng VN
+        RuleFor(x => x.PhoneNumber)
+            .NotEmpty().WithMessage("Vui lòng nhập số điện thoại.")
+            .Matches(@"^(03|05|07|08|09|01[2|6|8|9])+([0-9]{8})$")
+            .WithMessage("SĐT không đúng định dạng (10 số).");
+
+        RuleFor(x => x.Gender)
+            .NotEmpty().WithMessage("Vui lòng chọn giới tính.");
     }
 }
