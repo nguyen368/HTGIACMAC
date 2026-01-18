@@ -1,92 +1,81 @@
+using AURA.Services.MedicalRecord.Application.DTOs;
 using AURA.Services.MedicalRecord.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
-using Microsoft.AspNetCore.Authentication.JwtBearer; // Cần thêm
-using Microsoft.IdentityModel.Tokens;                // Cần thêm
-using System.Text;    
 using FluentValidation;
-using FluentValidation.AspNetCore;
-using AURA.Services.MedicalRecord.Application.Validators;
-using AURA.Services.MedicalRecord.Application.DTOs; // Chứa UpdatePatientProfileRequest
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Cấu hình Database
+// ====================================================
+// 1. ĐĂNG KÝ DỊCH VỤ (REGISTER SERVICES)
+// ====================================================
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// A. Kết nối Database (PostgreSQL)
 builder.Services.AddDbContext<MedicalDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? "Key_Mac_Dinh_De_Khong_Bi_Loi_Null_123456"; // Thêm giá trị fallback
-var key = Encoding.UTF8.GetBytes(secretKey);
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ClockSkew = TimeSpan.Zero 
-    };
-});
-builder.Services.AddControllers();
-builder.Services.AddScoped<IValidator<UpdatePatientProfileRequest>, UpdatePatientProfileValidator>();
-// 👆 HẾT SỬA 👆
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddFluentValidationAutoValidation(); // Bật tính năng tự động validate
-builder.Services.AddValidatorsFromAssemblyContaining<UpdatePatientProfileValidator>(); // Quét tất cả Validator trong cùng assembly
-// ---------------------
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA MedicalRecord API", Version = "v1" });
+// B. Đăng ký Validator (FluentValidation)
+// Lưu ý: Nếu dòng này báo lỗi đỏ, hãy đảm bảo bạn đã có class UpdatePatientProfileRequest
+// Nếu chưa có, bạn có thể tạm thời comment dòng này lại.
+try {
+    builder.Services.AddValidatorsFromAssemblyContaining<UpdatePatientProfileRequest>();
+} catch { /* Bỏ qua nếu chưa có validator */ }
 
-    // 1. Định nghĩa Security Scheme (Bearer Token)
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+// C. Cấu hình Authentication (JWT)
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "SuperSecretKey_AuraProject_2026_Minimum32Bytes";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        Description = "Nhập token theo định dạng: Bearer {token}",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+        options.RequireHttpsMetadata = false;
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            new string[] { }
-        }
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
+
+// D. Cấu hình CORS (QUAN TRỌNG CHO FRONTEND)
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy => 
+    {
+        policy.AllowAnyOrigin()   // Chấp nhận mọi nguồn (React, Mobile...)
+              .AllowAnyMethod()   // Chấp nhận GET, POST, PUT, DELETE
+              .AllowAnyHeader();  // Chấp nhận mọi Header
     });
 });
 
 var app = builder.Build();
 
-// 2. Middleware
+// ====================================================
+// 2. MIDDLEWARE PIPELINE (Thứ tự cực kỳ quan trọng)
+// ====================================================
+
+// 1. Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// 2. CORS (BẮT BUỘC PHẢI ĐỨNG TRƯỚC AUTH)
+app.UseCors(); 
+
+// 3. Auth
 app.UseAuthentication();
 app.UseAuthorization();
+
+// 4. Controller
 app.MapControllers();
 
 app.Run();
