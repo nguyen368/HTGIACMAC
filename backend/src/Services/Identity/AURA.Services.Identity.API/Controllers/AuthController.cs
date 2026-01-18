@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using AURA.Services.Identity.Application.Users.Commands.RegisterUser;
 using AURA.Services.Identity.Application.Users.Queries.Login;
+using AURA.Services.Identity.Application.Users.Queries.GetPatients; 
 
 namespace AURA.Services.Identity.API.Controllers;
 
@@ -24,5 +25,13 @@ public class AuthController : ControllerBase
     {
         var result = await _sender.Send(query);
         return result.IsSuccess ? Ok(result) : Unauthorized(result.Error);
+    }
+
+    [HttpGet("patients")]
+    public async Task<IActionResult> GetAllPatients()
+    {
+        var result = await _sender.Send(new GetPatientsQuery());
+        // Trả về Ok kèm theo Result object (đã chứa property IsSuccess)
+        return result.IsSuccess ? Ok(result) : BadRequest(result.Error);
     }
 }

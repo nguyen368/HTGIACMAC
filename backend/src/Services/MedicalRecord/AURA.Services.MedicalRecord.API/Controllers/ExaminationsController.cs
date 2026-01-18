@@ -4,124 +4,175 @@ using AURA.Services.MedicalRecord.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace AURA.Services.MedicalRecord.API.Controllers;
-
-[ApiController]
-[Route("api/examinations")]
-public class ExaminationsController : ControllerBase
+namespace AURA.Services.MedicalRecord.API.Controllers
 {
-    private readonly MedicalDbContext _context;
-
-    public ExaminationsController(MedicalDbContext context)
+    [ApiController]
+    [Route("api/medical-records/examinations")]
+    public class ExaminationsController : ControllerBase
     {
-        _context = context;
-    }
+        private readonly MedicalDbContext _context;
 
-    // =========================================================================
-    // PHẦN 1: API HÀNG CHỜ (TUẦN 2)
-    // =========================================================================
+        public ExaminationsController(MedicalDbContext context)
+        {
+            _context = context;
+        }
 
-    // GET: api/examinations/queue -> Lấy danh sách chờ cho Bác sĩ
-    [HttpGet("queue")]
-    public async Task<IActionResult> GetWaitingList()
-    {
-        var query = await _context.Examinations
-            .AsNoTracking()
-            .Include(e => e.Patient) // Join bảng để lấy tên
-            .Where(e => e.Status == "Pending" || e.Status == "Analyzed") // Lấy cả ca Chờ và Đã có AI
-            .OrderBy(e => e.ExamDate)
-            .Select(e => new ExaminationQueueDto
+        // =========================================================================
+        // PHẦN 1: API MỚI CHO CLINIC WEB (Upload & Lưu kết quả)
+        // =========================================================================
+
+        // [POST] Tạo mới/Lưu kết quả khám (Quan trọng nhất)
+        [HttpPost]
+        public async Task<IActionResult> CreateExamination([FromBody] CreateExaminationRequest request)
+        {
+            if (request.PatientId == Guid.Empty) return BadRequest("PatientId is required");
+
+            var examination = new Examination(
+                request.PatientId,
+                request.ImageId,
+                request.Diagnosis,
+                request.DoctorNotes,
+                request.DoctorId
+            );
+
+            _context.Examinations.Add(examination);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Đã lưu kết quả khám thành công", Id = examination.Id });
+        }
+
+        // [GET] Lấy chi tiết ca khám
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetExaminationById(Guid id)
+        {
+            var exam = await _context.Examinations
+                .Include(e => e.Patient)
+                .FirstOrDefaultAsync(e => e.Id == id);
+
+            if (exam == null) return NotFound(new { Message = "Không tìm thấy hồ sơ khám" });
+
+            // Tính tuổi an toàn
+            var age = exam.Patient != null ? (DateTime.UtcNow.Year - exam.Patient.DateOfBirth.Year) : 0;
+
+            return Ok(new 
             {
-                Id = e.Id,
-                PatientId = e.PatientId ?? Guid.Empty,
-                PatientName = e.Patient != null ? e.Patient.FullName : "Unknown",
-                ImageUrl = e.ImageUrl,
-                ExamDate = e.ExamDate,
-                Status = e.Status
-            })
-            .ToListAsync();
+                exam.Id,
+                PatientName = exam.Patient?.FullName ?? "Unknown",
+                Age = age,
+                Gender = exam.Patient?.Gender ?? "Unknown",
+                ImageUrl = exam.ImageUrl, 
+                exam.Status,
+                exam.ExamDate,
+                exam.DoctorNotes,
+                DiagnosisResult = exam.Diagnosis // Map field
+            });
+        }
 
-        return Ok(query);
-    }
-
-    // POST: api/examinations/fake -> Tạo dữ liệu giả để test
-    [HttpPost("fake")]
-    public async Task<IActionResult> CreateFakeData(Guid patientId)
-    {
-        var fakeExam = new Examination(patientId, "https://via.placeholder.com/600x400?text=Eye+Image+Test");
-        _context.Examinations.Add(fakeExam);
-        await _context.SaveChangesAsync();
-        return Ok(new { Message = "Đã tạo ca khám giả thành công!", ExamId = fakeExam.Id });
-    }
-
-    // =========================================================================
-    // PHẦN 2: CHI TIẾT HỒ SƠ CHO UI (TUẦN 4 - NEW 🌟)
-    // =========================================================================
-
-    // GET: api/examinations/{id} -> Lấy chi tiết 1 ca khám để hiển thị lên Doctor Workstation
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetExaminationDetail(Guid id)
-    {
-        var exam = await _context.Examinations
-            .AsNoTracking()
-            .Include(e => e.Patient)
-            .FirstOrDefaultAsync(e => e.Id == id);
-
-        if (exam == null) return NotFound("Không tìm thấy hồ sơ.");
-
-        // Trả về object phẳng (flat) để Frontend dễ hiển thị
-        return Ok(new 
+        // [GET] Thống kê Dashboard
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetStats()
         {
-            exam.Id,
-            PatientName = exam.Patient?.FullName ?? "Unknown",
-            PatientId = exam.PatientId,
-            ImageUrl = exam.ImageUrl,
-            DiagnosisResult = exam.DiagnosisResult, // Kết quả AI
-            DoctorNotes = exam.DoctorNotes,         // Ghi chú bác sĩ (nếu có)
-            Status = exam.Status,
-            ExamDate = exam.ExamDate
-        });
-    }
+            var today = DateTime.UtcNow.Date;
 
-    // =========================================================================
-    // PHẦN 3: STATE PATTERN API (TUẦN 3)
-    // =========================================================================
+            var totalPatients = await _context.Patients.CountAsync();
+            var pendingExams = await _context.Examinations.CountAsync(e => e.Status == "Pending");
+            
+            var completedToday = await _context.Examinations
+                .CountAsync(e => (e.Status == "Completed" || e.Status == "Verified") && e.ExamDate >= today);
 
-    // PUT: api/examinations/{id}/ai-result -> AI trả kết quả về
-    [HttpPut("{id}/ai-result")]
-    public async Task<IActionResult> UpdateAiResult(Guid id, [FromBody] string aiResult)
-    {
-        var exam = await _context.Examinations.FindAsync(id);
-        if (exam == null) return NotFound("Không tìm thấy ca khám.");
+            var highRisk = await _context.Examinations
+                .CountAsync(e => (e.Status == "Completed" || e.Status == "Verified") 
+                                 && e.Diagnosis != "Bình thường" 
+                                 && !string.IsNullOrEmpty(e.Diagnosis));
 
-        try
+            return Ok(new 
+            {
+                TotalPatients = totalPatients,
+                PendingExams = pendingExams,
+                CompletedToday = completedToday,
+                HighRiskCases = highRisk
+            });
+        }
+
+        // =========================================================================
+        // PHẦN 2: API CŨ CỦA TEAM (Giữ nguyên để không conflict)
+        // =========================================================================
+
+        [HttpGet("queue")]
+        public async Task<IActionResult> GetWaitingList()
         {
-            exam.UpdateAiResult(aiResult);
+            var query = await _context.Examinations
+                .AsNoTracking()
+                .Include(e => e.Patient)
+                .Where(e => e.Status == "Pending" || e.Status == "Analyzed")
+                .OrderBy(e => e.ExamDate)
+                .Select(e => new ExaminationQueueDto
+                {
+                    Id = e.Id,
+                    PatientId = e.PatientId,
+                    PatientName = e.Patient != null ? e.Patient.FullName : "Unknown",
+                    ImageUrl = e.ImageUrl,
+                    ExamDate = e.ExamDate,
+                    Status = e.Status
+                })
+                .ToListAsync();
+
+            return Ok(query);
+        }
+
+        [HttpPost("fake")]
+        public async Task<IActionResult> CreateFakeData(Guid patientId)
+        {
+            var fakeExam = new Examination(patientId, "https://via.placeholder.com/150");
+            _context.Examinations.Add(fakeExam);
             await _context.SaveChangesAsync();
-            return Ok(new { Message = "AI cập nhật kết quả thành công", NewStatus = exam.Status });
+            return Ok(new { Message = "Đã tạo ca khám giả thành công!", ExamId = fakeExam.Id });
         }
-        catch (InvalidOperationException ex)
+
+        [HttpPut("{id}/ai-result")]
+        public async Task<IActionResult> UpdateAiResult(Guid id, [FromBody] string aiResult)
         {
-            return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
+            var exam = await _context.Examinations.FindAsync(id);
+            if (exam == null) return NotFound("Không tìm thấy ca khám.");
+
+            try
+            {
+                exam.UpdateAiResult(aiResult);
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = "Đã cập nhật AI thành công" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
+            }
+        }
+
+        [HttpPut("{id}/verify")]
+        public async Task<IActionResult> VerifyExamination(Guid id, [FromBody] ConfirmDiagnosisRequest request)
+        {
+            var exam = await _context.Examinations.FindAsync(id);
+            if (exam == null) return NotFound("Không tìm thấy ca khám.");
+
+            try
+            {
+                exam.ConfirmDiagnosis(request.DoctorNotes, request.FinalDiagnosis);
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = "Bác sĩ đã duyệt thành công" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
+            }
         }
     }
 
-    // PUT: api/examinations/{id}/verify -> Bác sĩ duyệt hồ sơ
-    [HttpPut("{id}/verify")]
-    public async Task<IActionResult> VerifyExamination(Guid id, [FromBody] ConfirmDiagnosisRequest request)
+    // --- DTOs ---
+    public class CreateExaminationRequest
     {
-        var exam = await _context.Examinations.FindAsync(id);
-        if (exam == null) return NotFound("Không tìm thấy ca khám.");
-
-        try
-        {
-            exam.ConfirmDiagnosis(request.DoctorNotes, request.FinalDiagnosis);
-            await _context.SaveChangesAsync();
-            return Ok(new { Message = "Bác sĩ đã duyệt hồ sơ thành công", NewStatus = exam.Status });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
-        }
+        public Guid PatientId { get; set; }
+        public Guid ImageId { get; set; }
+        public string Diagnosis { get; set; } = string.Empty;
+        public string DoctorNotes { get; set; } = string.Empty;
+        public Guid DoctorId { get; set; }
     }
 }

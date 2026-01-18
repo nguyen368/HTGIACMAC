@@ -1,5 +1,6 @@
-using System.Threading; // Cần thêm dòng này cho CancellationToken
+using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using AURA.Services.Identity.Domain.Entities;
 using AURA.Services.Identity.Domain.Repositories;
@@ -16,7 +17,6 @@ namespace AURA.Services.Identity.Infrastructure.Repositories
             _context = context;
         }
 
-        // --- Các hàm cũ ---
         public async Task<User?> GetByEmailAsync(string email)
         {
             return await _context.Users
@@ -29,22 +29,23 @@ namespace AURA.Services.Identity.Infrastructure.Repositories
                 .AnyAsync(u => u.Email == email);
         }
 
-        // --- CÁC HÀM MỚI BỔ SUNG ĐỂ SỬA LỖI ---
-
-        // 1. Hàm thêm User mới
         public async Task AddAsync(User user)
         {
             await _context.Users.AddAsync(user);
             await _context.SaveChangesAsync();
         }
 
-        // 2. Hàm tìm User theo Username (có CancellationToken)
         public async Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken)
         {
-            // LƯU Ý: Nếu biến 'u.Username' báo lỗi đỏ, hãy thử đổi thành 'u.UserName' (chữ N viết hoa)
-            // tùy thuộc vào cách bạn đặt tên trong Entity User.
+            // Kiểm tra tên thuộc tính trong DB của bạn là Username hay UserName để tránh lỗi
             return await _context.Users
                 .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+        }
+
+        // --- CÀI ĐẶT HÀM MỚI: Truy vấn danh sách từ Database ---
+        public async Task<IEnumerable<User>> GetAllAsync(CancellationToken cancellationToken = default)
+        {
+            return await _context.Users.ToListAsync(cancellationToken);
         }
     }
 }

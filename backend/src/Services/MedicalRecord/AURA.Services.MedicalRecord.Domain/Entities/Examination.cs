@@ -7,62 +7,81 @@ namespace AURA.Services.MedicalRecord.Domain.Entities;
 public class Examination : Entity
 {
     // --- 1. Properties (Dữ liệu lưu DB) ---
-    public Guid? PatientId { get; private set; }
+    public Guid PatientId { get; private set; }
+    
+    // ID Bác sĩ và ID Ảnh
+    public Guid DoctorId { get; set; }
+    public Guid ImageId { get; set; }
+
     public DateTime ExamDate { get; private set; }
     
-    // Cho phép set public để State Class có thể cập nhật kết quả
-    public string DiagnosisResult { get; set; } 
-    public string DoctorNotes { get; set; }
+    // [FIX] Khởi tạo giá trị mặc định để tránh Warning CS8618
+    public string Diagnosis { get; set; } = string.Empty;
+    public string DoctorNotes { get; set; } = string.Empty;
     
-    public string ImageUrl { get; private set; }
-    public string Status { get; private set; } // Lưu DB dạng string: "Pending", "Analyzed", "Verified"
+    public string ImageUrl { get; private set; } = string.Empty;
+    
+    // Mặc định trạng thái là Pending
+    public string Status { get; private set; } = "Pending"; 
 
-    // Navigation Property (Để join bảng)
+    // Navigation Property
     public virtual Patient? Patient { get; set; }
 
-    // --- 2. State Pattern Logic (Xử lý trạng thái) ---
+    // --- 2. State Pattern Logic ---
     
-    // Biến chứa State Object (Chỉ dùng trong code, KHÔNG lưu xuống DB)
+    // [FIX] Khởi tạo luôn state mặc định để tránh null
     [NotMapped]
-    private ExaminationState _state;
+    private ExaminationState _state = new PendingState();
 
     // --- 3. Constructors ---
 
     // Constructor rỗng (Bắt buộc cho EF Core)
-    private Examination() 
-    { 
-        // Khi EF Core load dữ liệu lên, ta cần mapping lại String -> State Object
-        // Nhưng ta không gọi LoadState() ở đây để tránh lỗi circular reference
+    public Examination() { }
+
+    // Constructor dùng cho API "Lưu Kết Quả" từ Clinic Web
+    // Tạo ra một ca khám đã hoàn tất (Verified) ngay lập tức
+    public Examination(Guid patientId, Guid imageId, string diagnosis, string notes, Guid doctorId)
+    {
+        Id = Guid.NewGuid();
+        PatientId = patientId;
+        ImageId = imageId;
+        Diagnosis = diagnosis ?? string.Empty;
+        DoctorNotes = notes ?? string.Empty;
+        DoctorId = doctorId;
+        ExamDate = DateTime.UtcNow;
+        ImageUrl = ""; 
+
+        // Thiết lập trạng thái là đã xác thực (Verified)
+        // Lưu ý: Class VerifiedState phải tồn tại và đúng tên
+        TransitionTo(new VerifiedState()); 
     }
 
-    // Constructor tạo mới (Mặc định là Pending)
+    // Constructor cũ (Dùng cho luồng Check-in / Upload ảnh)
     public Examination(Guid patientId, string imageUrl)
     {
         Id = Guid.NewGuid();
         PatientId = patientId;
-        ImageUrl = imageUrl;
+        ImageUrl = imageUrl ?? string.Empty;
         ExamDate = DateTime.UtcNow;
-        DiagnosisResult = "";
-        DoctorNotes = "";
+        Diagnosis = string.Empty;
+        DoctorNotes = string.Empty;
         
-        // Khởi tạo trạng thái ban đầu
         TransitionTo(new PendingState());
     }
 
     // --- 4. Methods hỗ trợ State ---
 
-    // Hàm chuyển đổi trạng thái
     public void TransitionTo(ExaminationState newState)
     {
         _state = newState;
         
-        // Đồng bộ hóa ngược lại vào biến Status (string) để lưu xuống DB
+        // Map ngược lại string để lưu DB
         if (newState is PendingState) Status = "Pending";
         else if (newState is AnalyzedState) Status = "Analyzed";
         else if (newState is VerifiedState) Status = "Verified";
+        else Status = "Unknown";
     }
 
-    // Hàm khôi phục State từ String (Dùng khi lấy dữ liệu từ DB lên)
     public void LoadState()
     {
         switch (Status)
@@ -74,19 +93,17 @@ public class Examination : Entity
         }
     }
 
-    // --- 5. Business Logic (Ủy quyền cho State xử lý) ---
+    // --- 5. Business Logic ---
 
-    // Hành động 1: AI trả kết quả
     public void UpdateAiResult(string aiResult)
     {
-        if (_state == null) LoadState(); // Đảm bảo State đã được load
+        // Không cần check null _state nữa vì đã new ở trên
         _state.ProcessAiResult(this, aiResult);
     }
 
-    // Hành động 2: Bác sĩ duyệt
+    // Cập nhật chẩn đoán của bác sĩ
     public void ConfirmDiagnosis(string doctorNotes, string finalResult)
     {
-        if (_state == null) LoadState();
         _state.VerifyByDoctor(this, doctorNotes, finalResult);
     }
 }

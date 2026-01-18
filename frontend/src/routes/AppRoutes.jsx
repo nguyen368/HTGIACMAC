@@ -1,79 +1,49 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; 
+import { useAuth } from '../context/AuthContext';
+
+// 1. Import trang Login
 import AuthPage from '../modules/PatientWebApp/pages/Auth/AuthPage';
+
+// 2. Import các trang Clinic
 import ClinicUploadPage from '../modules/ClinicWebApp/pages/Upload/ClinicUploadPage'; 
+
+// [QUAN TRỌNG 1] Import file Dashboard xịn bạn vừa gửi
+import ClinicDashboard from '../modules/ClinicWebApp/pages/Dashboard/ClinicDashboard'; // Kiểm tra đúng đường dẫn file của bạn
+
+// [QUAN TRỌNG 2] Import file Bàn làm việc (Dùng để xem chi tiết)
+import DoctorWorkstation from '../modules/ClinicWebApp/pages/components/DoctorWorkstation'; 
+
+// 3. Import trang Patient
 import PatientLayout from '../modules/PatientWebApp/pages/Dashboard/PatientLayout';
-import DoctorWorkstation from '../modules/ClinicWebApp/pages/components/DoctorWorkstation';
 
-// --- COMPONENT BẢO VỆ ROUTE ---
-const ProtectedRoute = ({ children, allowedRoles }) => {
-    const token = localStorage.getItem('token');
-    
-    // 1. Chưa đăng nhập -> Về Login
-    if (!token) {
-        return <Navigate to="/login" replace />;
-    }
-
-    try {
-        const decoded = jwtDecode(token);
-        // Lấy Role an toàn (thử mọi key có thể)
-        const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
-        const userRole = decoded[roleKey] || decoded.role || decoded.Role;
-
-        // 2. Kiểm tra Role
-        if (allowedRoles && !allowedRoles.includes(userRole)) {
-            console.warn(`Bị chặn: Role ${userRole} không nằm trong [${allowedRoles}]`);
-            return <Navigate to="/login" replace />; 
-        }
-
-        return children;
-    } catch (error) {
-        localStorage.removeItem('token');
-        return <Navigate to="/login" replace />;
-    }
+const PrivateRoute = ({ children }) => {
+    const { user } = useAuth(); 
+    return user ? children : <Navigate to="/login" />;
 };
 
 const AppRoutes = () => {
-    const testExamId = "600bacf7-85e5-4be0-97ae-22b2bbc28189";
-
     return (
         <Routes>
-            {/* --- Public Routes --- */}
             <Route path="/login" element={<AuthPage />} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/auth" element={<Navigate to="/login" />} />
+            <Route path="/" element={<Navigate to="/login" />} />
 
-            {/* --- Doctor / Clinic Routes --- */}
-            <Route 
-                path="/doctor" 
-                element={
-                    <ProtectedRoute allowedRoles={['Doctor', 'doctor', 'Admin', 'admin']}>
-                        <DoctorWorkstation examId={testExamId} />
-                    </ProtectedRoute>
-                } 
-            />
+            {/* --- CLINIC ROUTES --- */}
             
-            <Route 
-                path="/clinic/upload" 
-                element={
-                    <ProtectedRoute allowedRoles={['Doctor', 'doctor', 'Admin', 'admin']}>
-                        <ClinicUploadPage />
-                    </ProtectedRoute>
-                } 
-            />
+            {/* 👉 1. Trang chủ Dashboard dùng file ClinicDashboard */}
+            <Route path="/clinic/dashboard" element={<ClinicDashboard />} />
 
-            {/* --- Patient Routes --- */}
-            <Route 
-                path="/patient/dashboard" 
-                element={
-                    <ProtectedRoute allowedRoles={['Patient', 'patient']}>
-                        <PatientLayout />
-                    </ProtectedRoute>
-                } 
-            />
+            {/* 2. Trang Upload */}
+            <Route path="/clinic/upload" element={<ClinicUploadPage />} />
+            
+            {/* 3. Trang Chi tiết khám dùng DoctorWorkstation */}
+            <Route path="/clinic/exam/:id" element={<DoctorWorkstation />} />
 
-            {/* --- 404 --- */}
-            <Route path="*" element={<div style={{padding:'20px'}}>404 - Trang không tìm thấy</div>} />
+            {/* --- PATIENT ROUTES --- */}
+            <Route path="/patient/dashboard" element={<PatientLayout /> } />
+            
+            <Route path="*" element={<div>404 - Không tìm thấy trang</div>} />
         </Routes>
     );
 };
