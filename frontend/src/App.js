@@ -1,12 +1,19 @@
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import AppRoutes from './routes/AppRoutes';
+import AppRoutes from './routes/AppRoutes'; // Router của nhóm
 import './App.css';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext'; // Context của nhóm
+
+// Import hiệu ứng Tết của bạn
+import TetAtmosphere from './modules/ClinicWebApp/pages/components/TetAtmosphere';
+
 function App() {
   return (
     <BrowserRouter>
-      {/* Bọc AuthProvider ở đây để toàn bộ app dùng được user, login, logout */}
+      {/* 1. Hiệu ứng Tết (Đặt ở đây để nó phủ lên toàn bộ ứng dụng dù ở trang nào) */}
+      <TetAtmosphere />
+
+      {/* 2. Cấu trúc Auth và Routing chuẩn của nhóm */}
       <AuthProvider>
           <AppRoutes />
       </AuthProvider>
@@ -14,4 +21,4 @@ function App() {
   );
 }
 
-export default App;
+export default App; 
