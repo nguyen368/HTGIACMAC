@@ -1,3 +1,4 @@
+using AURA.Services.MedicalRecord.Application.DTOs;
 using AURA.Services.MedicalRecord.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
@@ -7,29 +8,37 @@ using System.Text;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using AURA.Services.MedicalRecord.Application.Validators;
-using AURA.Services.MedicalRecord.Application.DTOs;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Cấu hình Database
+// ====================================================
+// 1. ĐĂNG KÝ DỊCH VỤ (REGISTER SERVICES)
+// ====================================================
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+
+// A. Kết nối Database (PostgreSQL) - Giữ nguyên
 builder.Services.AddDbContext<MedicalDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// [FIX 1] THÊM CORS (Cho phép React truy cập)
+// B. Cấu hình CORS (Dùng code của nhóm - Bảo mật hơn)
+// Chỉ cho phép React (localhost:3000) truy cập, thay vì cho tất cả như code cũ của bạn
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000") // Chỉ cho phép port 3000
+            policy.WithOrigins("http://localhost:3000") // Frontend của bạn chạy port này
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
 });
 
-// 2. Auth Config
+// C. Cấu hình Authentication (Dùng code của nhóm - Chuẩn hơn)
+// Code nhóm đọc từ appsettings.json thay vì fix cứng key
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? "Key_Mac_Dinh_De_Khong_Bi_Loi_Null_123456";
+var secretKey = jwtSettings["SecretKey"] ?? "Key_Mac_Dinh_Du_Phong_Cho_Dev_Moi_123456789"; // Dự phòng nếu null
 var key = Encoding.UTF8.GetBytes(secretKey);
 
 builder.Services.AddAuthentication(options =>
@@ -54,32 +63,52 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddControllers();
-
-// 3. Validation
+// D. Validator (Dùng code của nhóm)
 builder.Services.AddScoped<IValidator<UpdatePatientProfileRequest>, UpdatePatientProfileValidator>();
 builder.Services.AddFluentValidationAutoValidation();
-builder.Services.AddValidatorsFromAssemblyContaining<UpdatePatientProfileValidator>();
+try {
+    builder.Services.AddValidatorsFromAssemblyContaining<UpdatePatientProfileValidator>();
+} catch { /* Bỏ qua lỗi nếu chưa có validator nào */ }
 
-builder.Services.AddEndpointsApiExplorer();
+// E. Swagger (Dùng code của nhóm - Có nút ổ khóa Login)
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA MedicalRecord API", Version = "v1" });
+    
+    // Cấu hình nút Authorize (Ổ khóa) trên Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "Nhập token: Bearer {token}",
+        Description = "Nhập token theo định dạng: Bearer {token}",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement()
     {
-        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }, new string[] { } }
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                },
+                Scheme = "oauth2",
+                Name = "Bearer",
+                In = ParameterLocation.Header,
+            },
+            new List<string>()
+        }
     });
 });
 
 var app = builder.Build();
+
+// ====================================================
+// 2. MIDDLEWARE PIPELINE
+// ====================================================
 
 if (app.Environment.IsDevelopment())
 {
@@ -87,10 +116,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// [FIX 2] KÍCH HOẠT CORS (Phải đặt TRƯỚC Auth)
+// 1. KÍCH HOẠT CORS (Quan trọng: Phải dùng đúng tên Policy của nhóm)
 app.UseCors("AllowReactApp");
 
 app.UseHttpsRedirection();
+
+// 2. Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 

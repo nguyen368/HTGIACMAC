@@ -1,0 +1,270 @@
+/* Import font hiện đại (Nếu dự án chưa có) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    /* Bảng màu Y tế Hiện đại */
+    --primary-blue: #0284c7; /* Màu xanh chủ đạo (Clinical Blue) */
+    --primary-hover: #0369a1;
+    --bg-light: #f8fafc;     /* Nền sáng */
+    --bg-white: #ffffff;
+    --text-dark: #1e293b;    /* Màu chữ chính */
+    --text-gray: #64748b;    /* Màu chữ phụ */
+    --border-color: #e2e8f0;
+    
+    /* Màu trạng thái */
+    --status-pending: #f59e0b;
+    --status-analyzed: #0ea5e9;
+    --status-verified: #10b981;
+
+    /* Hiệu ứng */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --radius-md: 12px;
+    --radius-sm: 8px;
+}
+
+/* Reset cơ bản cho component này */
+.medical-workstation-container {
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    height: 100vh;
+    background-color: var(--bg-light);
+    color: var(--text-dark);
+}
+
+/* ================= CỘT TRÁI: ẢNH ================= */
+.image-viewer-panel {
+    flex: 1.2; /* Chiếm tỉ lệ lớn hơn một chút */
+    background-color: #0f172a; /* Nền tối sang trọng hơn đen tuyền */
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-color);
+}
+
+.image-header {
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--bg-light);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.image-container-inner {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    overflow: hidden;
+}
+
+.main-medical-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3); /* Bóng đổ tạo chiều sâu cho ảnh */
+}
+
+/* ================= CỘT PHẢI: DỮ LIỆU ================= */
+.data-panel {
+    flex: 1;
+    padding: 32px;
+    overflow-y: auto;
+    background-color: var(--bg-light);
+    display: flex;
+    flex-direction: column;
+    gap: 24px; /* Khoảng cách giữa các thẻ */
+}
+
+/* Header khu vực dữ liệu */
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.panel-header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary-blue);
+}
+
+.subtitle {
+    margin: 4px 0 0 0;
+    color: var(--text-gray);
+    font-size: 14px;
+}
+
+/* Badge trạng thái */
+.status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white;
+}
+.status-pending { background-color: var(--status-pending); }
+.status-analyzed { background-color: var(--status-analyzed); }
+.status-verified { background-color: var(--status-verified); }
+
+/* ================= CÁC THẺ (CARDS) ================= */
+.medical-card {
+    background-color: var(--bg-white);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    box-shadow: var(--shadow-md); /* Hiệu ứng nổi hiện đại */
+    border: 1px solid var(--border-color);
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--primary-blue);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Thẻ thông tin bệnh nhân */
+.patient-info-card .card-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.patient-info-card label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-gray);
+    margin-bottom: 4px;
+}
+
+.patient-info-card strong {
+    font-size: 15px;
+    color: var(--text-dark);
+}
+
+.patient-name {
+    color: var(--primary-blue) !important;
+    font-size: 16px !important;
+}
+
+/* Thẻ kết quả AI */
+.ai-result-card {
+    background: linear-gradient(to right, #f0f9ff, #e0f2fe); /* Gradient xanh nhẹ */
+    border: 1px solid #bae6fd;
+}
+
+.ai-diagnosis {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0c4a6e;
+    margin: 0 0 8px 0;
+}
+
+.disclaimer {
+    font-size: 12px;
+    color: #64748b;
+    font-style: italic;
+    margin: 0;
+}
+
+/* Thẻ Form chẩn đoán */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: var(--text-dark);
+}
+
+.medical-input, .medical-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.2s;
+    background-color: #f8fafc;
+}
+
+.medical-input:focus, .medical-textarea:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    background-color: var(--bg-white);
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1); /* Hiệu ứng focus hiện đại */
+}
+
+.medical-textarea {
+    resize: vertical;
+}
+
+/* Nút bấm chính */
+.primary-button {
+    width: 100%;
+    padding: 14px;
+    background-color: var(--primary-blue);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.primary-button:hover {
+    background-color: var(--primary-hover);
+}
+
+.primary-button:active {
+    transform: scale(0.99);
+}
+
+/* Chế độ đã duyệt (Verified Mode) */
+.verified-mode {
+    background-color: #f1fcf6; /* Nền xanh lá siêu nhạt */
+    border-color: #86efac;
+}
+
+.verified-mode .medical-input,
+.verified-mode .medical-textarea {
+    background-color: #e8f5e9; /* Input xám lại khi disable */
+    color: #555;
+    cursor: not-allowed;
+}
+
+.verified-banner {
+    text-align: center;
+    padding: 12px;
+    background-color: rgba(16, 185, 129, 0.1);
+    color: var(--status-verified);
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--status-verified);
+}
+
+/* Loading & Error states */
+.loading-screen, .error-screen, .empty-screen {
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    color: var(--text-gray);
+    font-weight: 500;
+    background-color: var(--bg-light);
+}
+.error-screen { color: #ef4444; }

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authApi from '../../../../api/authApi'; // Đảm bảo đường dẫn này đúng với dự án của bạn
+import { jwtDecode } from "jwt-decode"; // [MỚI] Thêm thư viện này
+import authApi from '../../../../api/authApi';
 import './AuthPage.css';
 import { useAuth } from '../../../../context/AuthContext';
 
 const AuthPage = () => {
     const navigate = useNavigate();
     const { login } = useAuth();
-    const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
+    const [activeTab, setActiveTab] = useState('login'); 
     const [isLoading, setIsLoading] = useState(false);
     const [showForgotPassword, setShowForgotPassword] = useState(false);
     
@@ -20,7 +21,7 @@ const AuthPage = () => {
     
     // State dữ liệu Register
     const [regData, setRegData] = useState({
-        accountType: 'Patient', // Mặc định là Patient (khớp với Role backend)
+        accountType: 'Patient', 
         fullName: '',
         email: '',
         phone: '+84',
@@ -37,9 +38,8 @@ const AuthPage = () => {
         special: false
     });
 
-    // --- LOGIC XỬ LÝ ---
+    // --- LOGIC XỬ LÝ (GIỮ NGUYÊN) ---
 
-    // 1. Cập nhật input Login
     const handleLoginChange = (e) => {
         const { id, value, checked, type } = e.target;
         setLoginData(prev => ({
@@ -48,24 +48,21 @@ const AuthPage = () => {
         }));
     };
 
-    // 2. Cập nhật input Register & Validate Password
     const handleRegChange = (e) => {
         const { name, value, checked, type } = e.target;
         
-        // Xử lý radio group account type
         if (name === 'account-type') {
             setRegData(prev => ({ ...prev, accountType: value }));
             return;
         }
 
-        const fieldName = name || e.target.id; // Fallback id nếu không có name
+        const fieldName = name || e.target.id; 
         
         setRegData(prev => ({
             ...prev,
             [fieldName]: type === 'checkbox' ? checked : value
         }));
 
-        // Validate mật khẩu realtime
         if (fieldName === 'password') {
             validatePassword(value);
         }
@@ -80,7 +77,7 @@ const AuthPage = () => {
         });
     };
 
-    // 3. Xử lý Đăng nhập (Call API)
+    // --- [QUAN TRỌNG] LOGIC ĐĂNG NHẬP ĐÃ SỬA ---
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
         if (!loginData.email || !loginData.password) {
@@ -95,9 +92,16 @@ const AuthPage = () => {
                 password: loginData.password
             });
 
+            // Lấy data an toàn
             const data = res.data.value || res.data;
+            
             if (data?.token) {
-                await login(data);
+                // 1. LƯU TOKEN TRƯỚC TIÊN (Để AppRoutes đọc được ngay)
+                localStorage.setItem('token', data.token);
+
+                // 2. Cập nhật Context
+                if (login) await login(data);
+                
                 alert("✅ Đăng nhập thành công!");
                 
                 // Chuyển hướng dựa trên Role
@@ -107,10 +111,10 @@ const AuthPage = () => {
                 } 
                 else if (role === 'doctor') {
                     // Nếu bác sĩ cũng dùng giao diện upload giống phòng khám
-                    navigate('/clinic/dashboard'); 
+                    navigate('/clinic/upload'); 
                 }
                 else if (role === 'clinic') {
-                     navigate('/clinic/dashboard');
+                     navigate('/clinic/upload');
                 }
                 else {
                     // Mặc định là Patient -> Vào Dashboard bệnh nhân
@@ -118,13 +122,14 @@ const AuthPage = () => {
                 } 
             }
         } catch (error) {
+            console.error(error);
             alert('Lỗi đăng nhập: ' + (error.response?.data?.detail || "Kiểm tra lại email/mật khẩu"));
         } finally {
             setIsLoading(false);
         }
     };
 
-    // 4. Xử lý Đăng ký (Call API)
+    // --- LOGIC ĐĂNG KÝ (GIỮ NGUYÊN) ---
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
         const { fullName, email, password, confirmPassword, terms, accountType } = regData;
@@ -141,7 +146,6 @@ const AuthPage = () => {
             alert('Vui lòng đồng ý với Điều khoản dịch vụ!');
             return;
         }
-        // Kiểm tra lại criteria lần cuối
         if (!Object.values(passwordCriteria).every(Boolean)) {
             alert('Mật khẩu chưa đáp ứng yêu cầu bảo mật!');
             return;
@@ -149,15 +153,9 @@ const AuthPage = () => {
 
         setIsLoading(true);
         try {
-            // Mapping Account Type HTML sang Role Backend
-            // HTML: patient, doctor, clinic
-            // Backend: Patient, Doctor, Admin (Hoặc Clinic nếu backend hỗ trợ)
             let roleToSend = 'Patient';
-            if (accountType === 'doctor') roleToSend = 'Doctor';
-            if (accountType === 'clinic') roleToSend = 'Doctor'; // Tạm thời map Clinic thành Doctor nếu chưa có Role Clinic
+            if (accountType === 'Doctor' || accountType === 'Clinic') roleToSend = 'Doctor';
 
-            // Backend yêu cầu: Username, Email, Password, FullName, Role
-            // Ta dùng Email làm Username luôn cho tiện
             await authApi.register({
                 username: email, 
                 email: email,
@@ -167,7 +165,7 @@ const AuthPage = () => {
             });
 
             alert('Đăng ký thành công! Vui lòng đăng nhập.');
-            setActiveTab('login'); // Chuyển về tab Login
+            setActiveTab('login');
         } catch (error) {
             alert('Đăng ký thất bại: ' + (error.response?.data?.detail || "Email đã tồn tại"));
         } finally {
@@ -175,6 +173,7 @@ const AuthPage = () => {
         }
     };
 
+    // --- GIAO DIỆN CŨ (GIỮ NGUYÊN 100%) ---
     return (
         <div className="auth-page-wrapper">
             <div className="auth-page-container">
