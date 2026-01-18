@@ -107,10 +107,10 @@ const AuthPage = () => {
                 } 
                 else if (role === 'doctor') {
                     // Nếu bác sĩ cũng dùng giao diện upload giống phòng khám
-                    navigate('/clinic/upload'); 
+                    navigate('/clinic/dashboard'); 
                 }
                 else if (role === 'clinic') {
-                     navigate('/clinic/upload');
+                     navigate('/clinic/dashboard');
                 }
                 else {
                     // Mặc định là Patient -> Vào Dashboard bệnh nhân

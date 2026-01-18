@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from 'react-router-dom'; // [MỚI] Import để chuyển trang
 import imagingApi from "../../../../api/imagingApi"; 
-import medicalApi from "../../../../api/medicalApi"; // [MỚI] Import API Medical
+import medicalApi from "../../../../api/medicalApi"; 
 import "./ClinicUploadPage.css"; 
 
 const ClinicUploadPage = () => {
+  const navigate = useNavigate(); // [MỚI] Hook điều hướng
+
   // --- STATE ---
   const [activeTab, setActiveTab] = useState("upload"); 
   const [activeUploadMode, setActiveUploadMode] = useState("single"); 
@@ -12,29 +15,21 @@ const ClinicUploadPage = () => {
   const [loading, setLoading] = useState(false);
   const [uploadResults, setUploadResults] = useState([]); 
   
-  // DỮ LIỆU THẬT
   const [stats, setStats] = useState(null); 
   const [patientImages, setPatientImages] = useState([]); 
   const [isLoadingImages, setIsLoadingImages] = useState(false);
 
-  // [MỚI] DỮ LIỆU BỆNH NHÂN TỪ SERVICE KHÁC
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState("");
 
-  // Clinic ID vẫn có thể giữ cứng hoặc lấy từ Login Token
   const CURRENT_CLINIC_ID = "d2b51336-6c1c-426d-881e-45051666617a";
 
   // --- API CALLS ---
-  
-  // 1. Lấy danh sách bệnh nhân từ Medical Record Service (Port 5002)
   const fetchPatients = useCallback(async () => {
     try {
         const data = await medicalApi.getAllPatients();
-        // Kiểm tra cấu trúc data trả về (tùy thuộc vào Controller bên Medical)
         const patientList = Array.isArray(data) ? data : (data.data || []);
         setPatients(patientList);
-
-        // Mặc định chọn người đầu tiên nếu chưa chọn
         if (patientList.length > 0 && !selectedPatientId) {
             setSelectedPatientId(patientList[0].id);
         }
@@ -43,7 +38,6 @@ const ClinicUploadPage = () => {
     }
   }, [selectedPatientId]);
 
-  // 2. Lấy thống kê
   const fetchStats = useCallback(async () => {
     try {
       const data = await imagingApi.getStats(CURRENT_CLINIC_ID);
@@ -51,10 +45,8 @@ const ClinicUploadPage = () => {
     } catch (error) { console.error("Lỗi tải thống kê:", error); }
   }, [CURRENT_CLINIC_ID]);
 
-  // 3. Lấy danh sách ảnh của BỆNH NHÂN ĐANG CHỌN
   const fetchPatientImages = useCallback(async () => {
     if (!selectedPatientId) return;
-    
     setIsLoadingImages(true);
     try {
       const data = await imagingApi.getImagesByPatient(selectedPatientId);
@@ -69,13 +61,11 @@ const ClinicUploadPage = () => {
   }, [selectedPatientId]);
 
   // --- EFFECTS ---
-  // Load dữ liệu ban đầu
   useEffect(() => {
     fetchPatients(); 
     fetchStats();
   }, [fetchPatients, fetchStats]);
 
-  // Khi chuyển tab Storage hoặc đổi Bệnh nhân -> Load ảnh của người đó
   useEffect(() => {
     if (activeTab === 'storage' && selectedPatientId) {
         fetchPatientImages();
@@ -97,17 +87,38 @@ const ClinicUploadPage = () => {
     
     try {
       let res;
-      // Gửi kèm ID bệnh nhân thật vừa chọn từ Dropdown
       if (activeUploadMode === 'batch') {
           res = await imagingApi.batchUpload(selectedFile, CURRENT_CLINIC_ID, selectedPatientId);
       } else {
           res = await imagingApi.uploadSingle(selectedFile, CURRENT_CLINIC_ID, selectedPatientId);
       }
 
-      if (res && (res.details || res.Details)) setUploadResults(res.details || res.Details);
-      alert(`✅ ${res.message || "Xử lý thành công!"}`);
+      // Lấy danh sách kết quả chi tiết
+      const details = res.details || res.Details || [];
+      setUploadResults(details);
+
+      // --- [LOGIC MỚI] XỬ LÝ CHUYỂN TRANG ---
+      // Nếu upload đơn lẻ thành công -> Hỏi chuyển sang trang ExamDetail
+      if (activeUploadMode === 'single' && details.length > 0) {
+          const item = details[0];
+          // Lưu ý: Cần Backend trả về field 'Id' hoặc 'id' trong Details
+          const newImageId = item.Id || item.id; 
+
+          if (item.status === 'Success' && newImageId) {
+             // Delay nhẹ để UI cập nhật xong bảng kết quả rồi mới hiện confirm
+             setTimeout(() => {
+                 if (window.confirm("Upload thành công! Chuyển sang màn hình chẩn đoán ngay?")) {
+                     navigate(`/clinic/exam/${newImageId}`);
+                 }
+             }, 100);
+          } else if (item.status === 'Success' && !newImageId) {
+              console.warn("Upload thành công nhưng không tìm thấy Image ID để chuyển trang. Kiểm tra lại Backend.");
+          }
+      } else {
+          // Nếu là batch upload hoặc không chuyển trang thì chỉ báo thành công
+          alert(`✅ ${res.message || "Xử lý thành công!"}`);
+      }
       
-      // Refresh dữ liệu
       fetchStats(); 
       if (activeTab === 'storage') fetchPatientImages();
 
@@ -134,9 +145,7 @@ const ClinicUploadPage = () => {
       } catch (error) { alert("Lỗi khi xóa: " + error.message); }
   }
 
-  // --- RENDER HELPERS ---
-
-  // Component chọn bệnh nhân (Dropdown)
+  // --- RENDER HELPERS (GIỮ NGUYÊN) ---
   const renderPatientSelector = () => (
       <div style={{
           background: '#e0f2fe', 
@@ -157,13 +166,8 @@ const ClinicUploadPage = () => {
             value={selectedPatientId} 
             onChange={(e) => setSelectedPatientId(e.target.value)}
             style={{
-                flex: 1, 
-                padding: '10px 15px', 
-                borderRadius: '8px', 
-                border: '1px solid #cbd5e1', 
-                fontSize: '15px',
-                outline: 'none',
-                cursor: 'pointer'
+                flex: 1, padding: '10px 15px', borderRadius: '8px', 
+                border: '1px solid #cbd5e1', fontSize: '15px', outline: 'none', cursor: 'pointer'
             }}
           >
               <option value="">-- Vui lòng chọn hồ sơ bệnh nhân --</option>
@@ -212,7 +216,6 @@ const ClinicUploadPage = () => {
         {renderSidebar()}
         
         <div className="services-container">
-            {/* Luôn hiện thanh chọn bệnh nhân ở Tab Upload và Storage */}
             {(activeTab === 'upload' || activeTab === 'storage') && renderPatientSelector()}
 
             {/* TAB UPLOAD */}
@@ -315,7 +318,7 @@ const ClinicUploadPage = () => {
                 </div>
             )}
 
-            {/* TAB VALIDATION (Lịch sử) */}
+            {/* TAB VALIDATION */}
             {activeTab === 'validation' && (
                 <div className="service-content active">
                      <h3>Hoạt động gần đây (Toàn hệ thống)</h3>

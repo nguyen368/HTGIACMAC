@@ -3,11 +3,8 @@ import axios from "axios";
 // Tạo instance riêng gọi thẳng vào Port 5003 (Imaging Service)
 const imagingClient = axios.create({
   baseURL: "http://localhost:5003/api", 
-  // Content-Type: multipart/form-data axios sẽ tự set khi thấy FormData
 });
 
-// 1. [QUAN TRỌNG] Thêm Interceptor Token (Giống hệt medicalApi)
-// Nếu không có cái này -> Lỗi 400 hoặc 401 ngay
 imagingClient.interceptors.request.use(async (config) => {
     const token = localStorage.getItem('aura_token');
     if (token) {
@@ -18,14 +15,10 @@ imagingClient.interceptors.request.use(async (config) => {
 
 imagingClient.interceptors.response.use(
   (response) => {
-    if (response && response.data) {
-      return response.data;
-    }
+    if (response && response.data) return response.data;
     return response;
   },
-  (error) => {
-    throw error;
-  }
+  (error) => { throw error; }
 );
 
 const imagingApi = {
@@ -33,17 +26,31 @@ const imagingApi = {
     const formData = new FormData();
     formData.append("File", file); 
     formData.append("ClinicId", clinicId);
-    formData.append("PatientId", patientId); // Server cần đúng tên này
-    
+    formData.append("PatientId", patientId); 
     return imagingClient.post("/imaging/upload", formData);
   },
 
-  // Lấy danh sách ảnh của một bệnh nhân
+  batchUpload: (file, clinicId, patientId) => {
+      const formData = new FormData();
+      formData.append("zipFile", file);
+      formData.append("clinicId", clinicId);
+      formData.append("patientId", patientId);
+      return imagingClient.post("/imaging/batch-upload", formData);
+  },
+
   getImagesByPatient: (patientId) => {
     return imagingClient.get(`/imaging/patient/${patientId}`);
   },
   
-  // Xóa ảnh
+  // [MỚI] Lấy chi tiết ảnh
+  getDetail: (imageId) => {
+    return imagingClient.get(`/imaging/${imageId}`);
+  },
+
+  getStats: (clinicId) => {
+      return imagingClient.get(`/imaging/stats/${clinicId}`);
+  },
+  
   deleteImage: (imageId) => {
     return imagingClient.delete(`/imaging/${imageId}`);
   }

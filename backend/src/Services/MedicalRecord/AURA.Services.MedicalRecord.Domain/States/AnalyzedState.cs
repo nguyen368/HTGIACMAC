@@ -1,14 +1,19 @@
 using AURA.Services.MedicalRecord.Domain.Entities;
 
-namespace AURA.Services.MedicalRecord.Domain.States;
-
-public class AnalyzedState : ExaminationState
+namespace AURA.Services.MedicalRecord.Domain.States
 {
-    public override void VerifyByDoctor(Examination context, string doctorNotes, string finalDiagnosis)
+    public class AnalyzedState : ExaminationState
     {
-        // Logic: Bác sĩ chốt -> Chuyển sang Verified
-        context.DoctorNotes = doctorNotes;
-        context.DiagnosisResult = finalDiagnosis; // Bác sĩ có quyền sửa lại kết quả AI nếu thấy sai
-        context.TransitionTo(new VerifiedState());
+        public override void ProcessAiResult(Examination context, string aiResult)
+        {
+            context.Diagnosis = aiResult; // SỬA
+        }
+
+        public override void VerifyByDoctor(Examination context, string notes, string finalResult)
+        {
+            context.DoctorNotes = notes;
+            context.Diagnosis = finalResult; // SỬA
+            context.TransitionTo(new VerifiedState());
+        }
     }
 }
