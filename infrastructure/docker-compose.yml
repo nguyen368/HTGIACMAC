@@ -1,18 +1,18 @@
 services:
-  # 1. DATABASE CHUNG (PostgreSQL)
+  # 1. DATABASE CHUNG
   aura.db:
-    image: postgres:15-alpine   
+    image: postgres:15-alpine
     container_name: aura.db
     restart: always
     environment:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=zxc123456
-      - POSTGRES_DB=aura_identity_db # DB mặc định
+      - POSTGRES_DB=aura_identity_db
     ports:
       - "5435:5432" # Map ra ngoài để debug local
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql # Script tạo các DB khác (Medical, Billing...)
+      - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - aura-network
 
@@ -24,7 +24,6 @@ services:
       dockerfile: backend/src/Services/Identity/AURA.Services.Identity.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      # 👇 Ghi đè connection string để trỏ vào container database
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_identity_db;Username=admin;Password=zxc123456
     ports:
       - "5001:8080"
