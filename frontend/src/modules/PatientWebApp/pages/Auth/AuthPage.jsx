@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authApi from '../../../../api/authApi'; // Đảm bảo đường dẫn này đúng với dự án của bạn
+import { jwtDecode } from "jwt-decode"; // Thư viện giải mã token
+import authApi from '../../../../api/authApi';
 import './AuthPage.css';
+import { useAuth } from '../../../../context/AuthContext';
 
 const AuthPage = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
+    const { login } = useAuth();
+    const [activeTab, setActiveTab] = useState('login'); 
     const [isLoading, setIsLoading] = useState(false);
     const [showForgotPassword, setShowForgotPassword] = useState(false);
     
@@ -18,7 +21,7 @@ const AuthPage = () => {
     
     // State dữ liệu Register
     const [regData, setRegData] = useState({
-        accountType: 'Patient', // Mặc định là Patient (khớp với Role backend)
+        accountType: 'Patient', 
         fullName: '',
         email: '',
         phone: '+84',
@@ -56,7 +59,7 @@ const AuthPage = () => {
             return;
         }
 
-        const fieldName = name || e.target.id; // Fallback id nếu không có name
+        const fieldName = name || e.target.id; 
         
         setRegData(prev => ({
             ...prev,
@@ -78,7 +81,7 @@ const AuthPage = () => {
         });
     };
 
-    // 3. Xử lý Đăng nhập (Call API)
+    // 3. Xử lý Đăng nhập (ĐÃ ĐƯỢC NÂNG CẤP LOGIC ĐIỀU HƯỚNG)
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
         if (!loginData.email || !loginData.password) {
@@ -94,25 +97,53 @@ const AuthPage = () => {
             });
 
             const data = res.data.value || res.data;
+            
             if (data?.token) {
-                localStorage.setItem('aura_token', data.token);
-                localStorage.setItem('aura_role', data.role);
-                alert(`Đăng nhập thành công! Xin chào ${data.fullName}`);
+                // 1. Lưu token vào Storage
+                localStorage.setItem('token', data.token);
+
+                // 2. Cập nhật Context
+                if (login) await login(data);
+
+                // 3. GIẢI MÃ TOKEN & ĐIỀU HƯỚNG
+                let userRole = '';
+                try {
+                    const decoded = jwtDecode(data.token);
+                    // Lấy Role: Ưu tiên key ngắn, dự phòng key dài của Microsoft
+                    userRole = decoded.role || 
+                               decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
+                               'patient'; // Mặc định là patient
+                } catch (err) {
+                    console.warn("Lỗi decode token:", err);
+                    userRole = 'patient';
+                }
                 
-                // Chuyển hướng dựa trên Role
-                const role = data.role?.toLowerCase() || '';
-                if (role === 'admin') navigate('/admin');
-                else if (role === 'doctor') navigate('/doctor');
-                else navigate('/'); 
+                // Chuẩn hóa về chữ thường để so sánh
+                const role = String(userRole).toLowerCase();
+                console.log("👉 Đăng nhập thành công với Role:", role);
+
+                // 4. ĐIỀU HƯỚNG CHÍNH XÁC
+                if (role === 'admin') {
+                    navigate('/admin');
+                } 
+                // Gộp cả 'doctor' và 'clinic' vào cùng 1 trang dashboard
+                else if (role === 'doctor' || role === 'clinic') {
+                    navigate('/clinic/dashboard'); 
+                }
+                else {
+                    // Mặc định là Patient
+                    navigate('/patient/dashboard'); 
+                } 
             }
         } catch (error) {
+            console.error(error);
             alert('Lỗi đăng nhập: ' + (error.response?.data?.detail || "Kiểm tra lại email/mật khẩu"));
         } finally {
             setIsLoading(false);
         }
     };
 
-    // 4. Xử lý Đăng ký (Call API)
+    // 4. Xử lý Đăng ký
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
         const { fullName, email, password, confirmPassword, terms, accountType } = regData;
@@ -129,7 +160,6 @@ const AuthPage = () => {
             alert('Vui lòng đồng ý với Điều khoản dịch vụ!');
             return;
         }
-        // Kiểm tra lại criteria lần cuối
         if (!Object.values(passwordCriteria).every(Boolean)) {
             alert('Mật khẩu chưa đáp ứng yêu cầu bảo mật!');
             return;
@@ -138,14 +168,11 @@ const AuthPage = () => {
         setIsLoading(true);
         try {
             // Mapping Account Type HTML sang Role Backend
-            // HTML: patient, doctor, clinic
-            // Backend: Patient, Doctor, Admin (Hoặc Clinic nếu backend hỗ trợ)
             let roleToSend = 'Patient';
-            if (accountType === 'doctor') roleToSend = 'Doctor';
-            if (accountType === 'clinic') roleToSend = 'Doctor'; // Tạm thời map Clinic thành Doctor nếu chưa có Role Clinic
+            if (accountType === 'Doctor' || accountType === 'Clinic') {
+                roleToSend = 'Doctor'; // Hiện tại Backend đang nhận role này là quyền cao
+            }
 
-            // Backend yêu cầu: Username, Email, Password, FullName, Role
-            // Ta dùng Email làm Username luôn cho tiện
             await authApi.register({
                 username: email, 
                 email: email,
@@ -155,9 +182,9 @@ const AuthPage = () => {
             });
 
             alert('Đăng ký thành công! Vui lòng đăng nhập.');
-            setActiveTab('login'); // Chuyển về tab Login
+            setActiveTab('login');
         } catch (error) {
-            alert('Đăng ký thất bại: ' + (error.response?.data?.detail || "Email đã tồn tại"));
+            alert('Đăng ký thất bại: ' + (error.response?.data?.detail || "Email đã tồn tại hoặc lỗi hệ thống"));
         } finally {
             setIsLoading(false);
         }

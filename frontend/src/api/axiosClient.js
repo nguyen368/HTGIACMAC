@@ -7,7 +7,7 @@ const axiosClient = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-});
+}); 
 
 // Tự động đính kèm Token nếu user đã đăng nhập
 axiosClient.interceptors.request.use(async (config) => {

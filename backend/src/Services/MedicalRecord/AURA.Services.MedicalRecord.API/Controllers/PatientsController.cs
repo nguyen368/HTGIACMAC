@@ -1,17 +1,17 @@
+using AURA.Services.MedicalRecord.Application.DTOs;
 using AURA.Services.MedicalRecord.Domain.Entities;
 using AURA.Services.MedicalRecord.Infrastructure.Data;
-using AURA.Services.MedicalRecord.Application.DTOs;
+using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using FluentValidation;
-using Microsoft.AspNetCore.Authorization;
 
 namespace AURA.Services.MedicalRecord.API.Controllers;
 
 [ApiController]
 [Route("api/patients")]
-[Authorize] // 🌟 Đặt ở đây: Bảo vệ TOÀN BỘ Controller (Create, Get, Put, History...)
+[Authorize]
 public class PatientsController : ControllerBase
 {
     private readonly MedicalDbContext _context;
@@ -23,12 +23,15 @@ public class PatientsController : ControllerBase
         _validator = validator;
     }
 
-    // 1. Tạo hồ sơ mới
+    // =================================================================================
+    // 1. QUẢN LÝ HỒ SƠ CÁ NHÂN (PROFILE)
+    // =================================================================================
+
+    // [POST] api/patients -> Tạo hồ sơ lần đầu
     [HttpPost]
-    // Không cần [Authorize] ở đây nữa vì đã có ở trên đầu Class rồi
     public async Task<IActionResult> Create([FromBody] UpdatePatientProfileRequest request)
     {
-        // --- 2. VALIDATION ---
+        // 1. Validation
         var validationResult = await _validator.ValidateAsync(request);
         if (!validationResult.IsValid)
         {
@@ -39,21 +42,15 @@ public class PatientsController : ControllerBase
             });
         }
 
-        // --- 3. LẤY USER ID ---
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdString))
-        {
-            userIdString = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
-        }
+        // 2. Lấy UserId từ Token
+        var userId = GetUserIdFromToken();
+        if (userId == Guid.Empty) return Unauthorized("Không tìm thấy User ID hợp lệ.");
 
-        if (string.IsNullOrEmpty(userIdString)) return BadRequest("Không tìm thấy User ID trong Token");
-        
-        var userId = Guid.Parse(userIdString);
-
-        // --- 4. LOGIC ---
+        // 3. Check tồn tại
         var existingPatient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
-        if (existingPatient != null) return BadRequest("Hồ sơ đã tồn tại.");
+        if (existingPatient != null) return BadRequest("Hồ sơ bệnh nhân đã tồn tại.");
 
+        // 4. Lưu DB
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
         var patient = new Patient(userId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
         
@@ -63,66 +60,116 @@ public class PatientsController : ControllerBase
         return Ok(patient);
     }
 
-    // 2. Lấy thông tin
+    // [GET] api/patients/me -> Xem hồ sơ của chính mình
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        // Đoạn check null này có thể giữ lại để an toàn, hoặc bỏ đi cũng được vì [Authorize] đã chặn rồi
-        if (string.IsNullOrEmpty(userIdString)) return Unauthorized(); 
-        
-        var userId = Guid.Parse(userIdString);
+        var userId = GetUserIdFromToken();
+        if (userId == Guid.Empty) return Unauthorized();
 
-        var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
+        // Include MedicalHistories để xem luôn tiền sử bệnh
+        var patient = await _context.Patients
+            .Include(p => p.MedicalHistories) 
+            .AsNoTracking() // Tối ưu đọc
+            .FirstOrDefaultAsync(p => p.UserId == userId);
+
+        // Nếu chưa có hồ sơ, trả về 404 hoặc null tùy logic FE, ở đây return NotFound để FE biết redirect
         if (patient == null) return NotFound("Chưa cập nhật hồ sơ y tế.");
 
         return Ok(patient);
     }
 
-    // 3. Cập nhật
+    // [PUT] api/patients/me -> Cập nhật thông tin (Đã giữ logic UPSERT của bạn)
     [HttpPut("me")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdatePatientProfileRequest request)
     {
-        // Validate dữ liệu cập nhật
+        // 1. Validate
         var validationResult = await _validator.ValidateAsync(request);
         if (!validationResult.IsValid)
         {
             return BadRequest(new { errors = validationResult.Errors.Select(e => e.ErrorMessage) });
         }
 
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdString)) return Unauthorized();
-        var userId = Guid.Parse(userIdString);
+        var userId = GetUserIdFromToken();
+        if (userId == Guid.Empty) return Unauthorized();
 
+        // 2. Tìm hồ sơ trong DB
         var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
-        if (patient == null) return NotFound("Hồ sơ không tồn tại.");
-
+        
+        // Chuẩn hóa ngày sinh sang UTC
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
-        
-        patient.UpdateInfo(request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
-        
-        _context.Patients.Update(patient);
+
+        // 3. Logic UPSERT (Update or Insert) - FIX QUAN TRỌNG
+        if (patient == null) 
+        {
+            // TRƯỜNG HỢP 1: Chưa có hồ sơ -> TẠO MỚI LUÔN
+            patient = new Patient(userId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+            _context.Patients.Add(patient);
+        }
+        else 
+        {
+            // TRƯỜNG HỢP 2: Đã có hồ sơ -> CẬP NHẬT
+            patient.UpdateInfo(request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+            _context.Patients.Update(patient);
+        }
+
         await _context.SaveChangesAsync();
 
         return Ok(patient);
     }
 
-    // 4. Lịch sử khám
-    [HttpGet("history")]
-    public async Task<IActionResult> GetMedicalHistory()
-    {
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdString)) return Unauthorized();
-        var userId = Guid.Parse(userIdString);
+    // =================================================================================
+    // 2. QUẢN LÝ LỊCH SỬ (HISTORY & EXAMS)
+    // =================================================================================
 
-        var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
+    // [GET] api/patients/examinations -> Xem lịch sử các lần khám
+    [HttpGet("examinations")]
+    public async Task<IActionResult> GetExaminationHistory()
+    {
+        var userId = GetUserIdFromToken();
+        var patient = await _context.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId);
+        
         if (patient == null) return NotFound("Chưa có hồ sơ bệnh nhân.");
 
-        var history = await _context.Examinations
-                                    .Where(e => e.PatientId == patient.Id)
-                                    .OrderByDescending(e => e.ExamDate)
-                                    .ToListAsync();
+        var exams = await _context.Examinations
+                                  .AsNoTracking()
+                                  .Where(e => e.PatientId == patient.Id)
+                                  .OrderByDescending(e => e.ExamDate)
+                                  .ToListAsync();
 
-        return Ok(history);
+        return Ok(exams);
+    }
+
+    // [POST] api/patients/{patientId}/history -> Thêm tiền sử bệnh
+    [HttpPost("{patientId}/history")]
+    public async Task<IActionResult> AddMedicalHistory(Guid patientId, [FromBody] AddMedicalHistoryRequest request)
+    {
+        var patient = await _context.Patients.FindAsync(patientId);
+        if (patient == null) return NotFound("Không tìm thấy bệnh nhân.");
+
+        // Gọi method Domain
+        patient.AddMedicalHistory(request.Condition, request.Description, request.DiagnosedDate);
+
+        await _context.SaveChangesAsync();
+        return Ok(new { Message = "Đã thêm tiền sử bệnh thành công!", PatientId = patientId });
+    }
+
+    // =================================================================================
+    // 3. HELPER METHODS
+    // =================================================================================
+    
+    private Guid GetUserIdFromToken()
+    {
+        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdString))
+        {
+            userIdString = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
+        }
+
+        if (Guid.TryParse(userIdString, out var userId))
+        {
+            return userId;
+        }
+        return Guid.Empty;
     }
 }

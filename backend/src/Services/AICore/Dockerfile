@@ -1,25 +1,21 @@
-# Dùng Python nhẹ
 FROM python:3.9-slim
 
-WORKDIR /app
-
-# Cài đặt thư viện hệ thống cho AI ---
+# Sửa lỗi cài đặt thư viện đồ họa cho OpenCV trên Debian mới
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy file requirements đã có Pytorch/Tensorflow
-COPY requirements.txt .
+WORKDIR /app
 
-# Cài đặt thư viện (Pytorch, torchvision, numpy...)
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy mã nguồn có chức năng kiểm tra GPU/CPU
 COPY . .
 
-# Mở cổng 8000 cho Flask
+# Tạo thư mục lưu kết quả AI
+RUN mkdir -p static/results
+
 EXPOSE 8000
 
-# Chạy ứng dụng
-CMD ["python", "main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
