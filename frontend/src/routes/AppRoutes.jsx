@@ -1,49 +1,74 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-
-// 1. Import trang Login
+import { jwtDecode } from "jwt-decode"; 
 import AuthPage from '../modules/PatientWebApp/pages/Auth/AuthPage';
-
-// 2. Import các trang Clinic
-import ClinicUploadPage from '../modules/ClinicWebApp/pages/Upload/ClinicUploadPage'; 
-
-// [QUAN TRỌNG 1] Import file Dashboard xịn bạn vừa gửi
-import ClinicDashboard from '../modules/ClinicWebApp/pages/Dashboard/ClinicDashboard'; // Kiểm tra đúng đường dẫn file của bạn
-
-// [QUAN TRỌNG 2] Import file Bàn làm việc (Dùng để xem chi tiết)
-import DoctorWorkstation from '../modules/ClinicWebApp/pages/components/DoctorWorkstation'; 
-
-// 3. Import trang Patient
 import PatientLayout from '../modules/PatientWebApp/pages/Dashboard/PatientLayout';
+import DoctorWorkstation from '../modules/ClinicWebApp/pages/components/DoctorWorkstation';
 
-const PrivateRoute = ({ children }) => {
-    const { user } = useAuth(); 
-    return user ? children : <Navigate to="/login" />;
+// Component bảo vệ Route (Giữ nguyên)
+const ProtectedRoute = ({ children, allowedRoles }) => {
+    const token = localStorage.getItem('token');
+    if (!token) return <Navigate to="/login" replace />;
+
+    try {
+        const decoded = jwtDecode(token);
+        const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
+        const userRole = (decoded[roleKey] || decoded.role || '').toLowerCase();
+        
+        // Chuẩn hóa roles cho phép về chữ thường
+        const normalizedAllowedRoles = allowedRoles.map(r => r.toLowerCase());
+
+        if (allowedRoles && !normalizedAllowedRoles.includes(userRole)) {
+            return <Navigate to="/login" replace />; 
+        }
+        return children;
+    } catch (error) {
+        localStorage.removeItem('token');
+        return <Navigate to="/login" replace />;
+    }
 };
 
 const AppRoutes = () => {
     return (
         <Routes>
             <Route path="/login" element={<AuthPage />} />
-            <Route path="/auth" element={<Navigate to="/login" />} />
-            <Route path="/" element={<Navigate to="/login" />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
-            {/* --- CLINIC ROUTES --- */}
-            
-            {/* 👉 1. Trang chủ Dashboard dùng file ClinicDashboard */}
-            <Route path="/clinic/dashboard" element={<ClinicDashboard />} />
+            {/* 1. Route cho BÁC SĨ (Doctor) */}
+            <Route 
+                path="/doctor" 
+                element={
+                    <ProtectedRoute allowedRoles={['Doctor']}>
+                        <DoctorWorkstation />
+                    </ProtectedRoute>
+                } 
+            />
 
-            {/* 2. Trang Upload */}
-            <Route path="/clinic/upload" element={<ClinicUploadPage />} />
-            
-            {/* 3. Trang Chi tiết khám dùng DoctorWorkstation */}
-            <Route path="/clinic/exam/:id" element={<DoctorWorkstation />} />
+            {/* 2. Route cho BỆNH NHÂN (Patient) */}
+            <Route 
+                path="/patient/dashboard" 
+                element={
+                    <ProtectedRoute allowedRoles={['Patient']}>
+                        <PatientLayout />
+                    </ProtectedRoute>
+                } 
+            />
 
-            {/* --- PATIENT ROUTES --- */}
-            <Route path="/patient/dashboard" element={<PatientLayout /> } />
-            
-            <Route path="*" element={<div>404 - Không tìm thấy trang</div>} />
+            {/* 3. Route cho ADMIN (Thay cho Clinic) */}
+            <Route 
+                path="/admin" 
+                element={
+                    <ProtectedRoute allowedRoles={['Admin', 'Administrator']}>
+                        <div style={{padding: '50px', textAlign: 'center'}}>
+                            <h1>🛡️ TRANG QUẢN TRỊ ADMIN</h1>
+                            <p>Đây là khu vực dành riêng cho Admin hệ thống.</p>
+                            <p>Chức năng: Quản lý người dùng, xem thống kê hệ thống, v.v.</p>
+                        </div>
+                    </ProtectedRoute>
+                } 
+            />
+
+            <Route path="*" element={<div>404 Not Found</div>} />
         </Routes>
     );
 };

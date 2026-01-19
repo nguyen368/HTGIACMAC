@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; // Thư viện giải mã token
+import { jwtDecode } from "jwt-decode"; 
 import authApi from '../../../../api/authApi';
 import './AuthPage.css';
 import { useAuth } from '../../../../context/AuthContext';
@@ -81,7 +81,7 @@ const AuthPage = () => {
         });
     };
 
-    // 3. Xử lý Đăng nhập (ĐÃ ĐƯỢC NÂNG CẤP LOGIC ĐIỀU HƯỚNG)
+    // 3. Xử lý Đăng nhập (Logic điều hướng 3 trang)
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
         if (!loginData.email || !loginData.password) {
@@ -112,7 +112,7 @@ const AuthPage = () => {
                     // Lấy Role: Ưu tiên key ngắn, dự phòng key dài của Microsoft
                     userRole = decoded.role || 
                                decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
-                               'patient'; // Mặc định là patient
+                               'patient'; 
                 } catch (err) {
                     console.warn("Lỗi decode token:", err);
                     userRole = 'patient';
@@ -123,12 +123,11 @@ const AuthPage = () => {
                 console.log("👉 Đăng nhập thành công với Role:", role);
 
                 // 4. ĐIỀU HƯỚNG CHÍNH XÁC
-                if (role === 'admin') {
+                if (role === 'admin' || role === 'administrator') {
                     navigate('/admin');
                 } 
-                // Gộp cả 'doctor' và 'clinic' vào cùng 1 trang dashboard
-                else if (role === 'doctor' || role === 'clinic') {
-                    navigate('/clinic/dashboard'); 
+                else if (role === 'doctor') {
+                    navigate('/doctor'); 
                 }
                 else {
                     // Mặc định là Patient
@@ -143,35 +142,30 @@ const AuthPage = () => {
         }
     };
 
-    // 4. Xử lý Đăng ký
+    // 4. Xử lý Đăng ký (Sửa Logic gửi Role Admin)
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
         const { fullName, email, password, confirmPassword, terms, accountType } = regData;
 
         if (!fullName || !email || !password || !confirmPassword) {
-            alert('Vui lòng nhập đầy đủ thông tin!');
-            return;
+            alert('Vui lòng nhập đầy đủ thông tin!'); return;
         }
         if (password !== confirmPassword) {
-            alert('Mật khẩu xác nhận không khớp!');
-            return;
+            alert('Mật khẩu xác nhận không khớp!'); return;
         }
         if (!terms) {
-            alert('Vui lòng đồng ý với Điều khoản dịch vụ!');
-            return;
+            alert('Vui lòng đồng ý với Điều khoản dịch vụ!'); return;
         }
         if (!Object.values(passwordCriteria).every(Boolean)) {
-            alert('Mật khẩu chưa đáp ứng yêu cầu bảo mật!');
-            return;
+            alert('Mật khẩu chưa đáp ứng yêu cầu bảo mật!'); return;
         }
 
         setIsLoading(true);
         try {
-            // Mapping Account Type HTML sang Role Backend
+            // [SỬA ĐỔI] Mapping Role Backend
             let roleToSend = 'Patient';
-            if (accountType === 'Doctor' || accountType === 'Clinic') {
-                roleToSend = 'Doctor'; // Hiện tại Backend đang nhận role này là quyền cao
-            }
+            if (accountType === 'Doctor') roleToSend = 'Doctor';
+            if (accountType === 'Admin') roleToSend = 'Admin'; // Gửi role Admin thay vì Clinic
 
             await authApi.register({
                 username: email, 
@@ -208,7 +202,7 @@ const AuthPage = () => {
                 {/* Main Content */}
                 <div className="auth-main-content">
                     <div className="auth-card-container">
-                        {/* Welcome Section (Left) */}
+                        {/* Welcome Section (Left) - GIỮ NGUYÊN */}
                         <div className="welcome-section">
                             <h2>Phát hiện sớm nguy cơ bệnh lý qua hình ảnh võng mạc</h2>
                             <p>Hệ thống AURA sử dụng AI để phân tích mạch máu võng mạc, hỗ trợ bác sĩ trong việc phát hiện sớm các nguy cơ tim mạch, tiểu đường và đột quỵ.</p>
@@ -310,11 +304,12 @@ const AuthPage = () => {
                                             />
                                             <label htmlFor="doctor">Bác sĩ</label>
                                             
+                                            {/* [SỬA ĐỔI] Thay Clinic thành Admin */}
                                             <input 
-                                                type="radio" id="clinic" name="account-type" value="Clinic"
-                                                checked={regData.accountType === 'Clinic'} onChange={handleRegChange}
+                                                type="radio" id="admin" name="account-type" value="Admin"
+                                                checked={regData.accountType === 'Admin'} onChange={handleRegChange}
                                             />
-                                            <label htmlFor="clinic">Phòng khám</label>
+                                            <label htmlFor="admin">Admin</label>
                                         </div>
                                     </div>
                                     
@@ -368,7 +363,7 @@ const AuthPage = () => {
                                             </button>
                                         </div>
                                         
-                                        {/* Password Requirements Checklist */}
+                                        {/* Password Requirements Checklist - GIỮ NGUYÊN */}
                                         <div className="password-requirements">
                                             <div className={`requirement ${passwordCriteria.length ? 'met' : 'not-met'}`}>
                                                 <i className={`fas ${passwordCriteria.length ? 'fa-check-circle' : 'fa-circle'}`}></i> Tối thiểu 8 ký tự
@@ -425,7 +420,7 @@ const AuthPage = () => {
                 </div>
             </div>
 
-            {/* Forgot Password Modal */}
+            {/* Forgot Password Modal - GIỮ NGUYÊN */}
             {showForgotPassword && (
                 <div className="auth-modal">
                     <div className="auth-modal-content">
