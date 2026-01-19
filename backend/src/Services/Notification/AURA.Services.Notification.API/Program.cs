@@ -1,33 +1,35 @@
-using MassTransit; 
+using MassTransit;
 using AURA.Services.Notification.API.Consumers;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers(); // Quan trọng: Kích hoạt Controller
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// --- CẤU HÌNH MASSTRANSIT (RABBITMQ) ---
+// --- BẮT ĐẦU CẤU HÌNH RABBITMQ ---
 builder.Services.AddMassTransit(x =>
 {
-    // Đăng ký Consumer để nhận tin nhắn
+    // 1. Đăng ký Consumer (Người nhận tin)
     x.AddConsumer<DiagnosisDoneConsumer>();
 
+    // 2. Cấu hình kết nối tới Docker RabbitMQ
     x.UsingRabbitMq((context, cfg) =>
     {
-        // Cấu hình kết nối tới RabbitMQ trong Docker
-        // Host: "rabbitmq" (tên service trong docker-compose)
+        // --- DÒNG QUAN TRỌNG NHẤT (Kiểm tra kỹ dòng này) ---
+        cfg.UseRawJsonSerializer(); 
+        // ----------------------------------------------------
+
         cfg.Host("rabbitmq", "/", h => {
             h.Username("guest");
             h.Password("guest");
         });
 
-        // Tự động tạo hàng đợi (Queue)
         cfg.ConfigureEndpoints(context);
     });
 });
-// -------------------------------------------
+// --- KẾT THÚC CẤU HÌNH ---
 
 var app = builder.Build();
 
@@ -38,8 +40,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
 app.UseAuthorization();
-app.MapControllers(); // Quan trọng: Map các route
+app.MapControllers();
 
 app.Run();
