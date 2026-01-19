@@ -89,8 +89,11 @@ services:
       dockerfile: backend/src/Services/Notification/AURA.Services.Notification.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq  # Cấu hình host
     ports:
       - "5005:8080"
+    depends_on:
+      - rabbitmq  # <-- Thêm dòng này
     networks:
       - aura-network
 
@@ -107,6 +110,19 @@ services:
       - medical-record-service
       - imaging-service
       - billing-service
+    networks:
+      - aura-network
+
+  #RabbitMQ
+  rabbitmq:
+    image: masstransit/rabbitmq:latest
+    container_name: aura-rabbitmq
+    ports:
+      - "5672:5672"   # Port để code kết nối
+      - "15672:15672" # Port trang quản trị web
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
     networks:
       - aura-network
 
