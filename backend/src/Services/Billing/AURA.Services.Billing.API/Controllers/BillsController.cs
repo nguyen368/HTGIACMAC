@@ -53,6 +53,14 @@ namespace AURA.Services.Billing.API.Controllers
 
             return Ok(newBill);
         }
+
+        [HttpGet]
+        public async Task<IActionResult> GetBills()
+        {
+            // Lấy tất cả hóa đơn từ Database về
+            var bills = await _context.Bills.ToListAsync();
+            return Ok(bills);
+        }
     }
 
     // Class DTO (Data Transfer Object) để nhận dữ liệu từ Frontend
