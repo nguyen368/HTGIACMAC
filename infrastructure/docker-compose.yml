@@ -9,7 +9,7 @@ services:
       - POSTGRES_PASSWORD=zxc123456
       - POSTGRES_DB=aura_identity_db
     ports:
-      - "5432:5432"
+      - "5435:5432" # Map ra ngoài để debug local
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -88,8 +88,11 @@ services:
       dockerfile: backend/src/Services/Notification/AURA.Services.Notification.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq  # Cấu hình host
     ports:
       - "5005:8080"
+    depends_on:
+      - rabbitmq  # <-- Thêm dòng này
     networks:
       - aura-network
 
@@ -109,21 +112,16 @@ services:
     networks:
       - aura-network
 
-  # === [MỚI] 8. FRONTEND SERVICE ===
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    container_name: aura-frontend
+  #RabbitMQ
+  rabbitmq:
+    image: masstransit/rabbitmq:latest
+    container_name: aura-rabbitmq
     ports:
-      - "3000:3000"
-    volumes:
-      - ../frontend:/app
-      - /app/node_modules
+      - "5672:5672"   # Port để code kết nối
+      - "15672:15672" # Port trang quản trị web
     environment:
-      - WATCHPACK_POLLING=true
-      - CHOKIDAR_USEPOLLING=true
-    restart: always
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
     networks:
       - aura-network
 

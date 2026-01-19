@@ -1,34 +1,79 @@
-using AURA.Services.Billing.Domain.Entities;
-using AURA.Services.Billing.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using AURA.Services.Billing.Domain.Entities;
+using AURA.Services.Billing.Infrastructure.Data;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
-namespace AURA.Services.Billing.API.Controllers;
-
-[ApiController]
-[Route("api/bills")]
-public class BillsController : ControllerBase
+namespace AURA.Services.Billing.API.Controllers
 {
-    private readonly BillingDbContext _context;
-
-    public BillsController(BillingDbContext context)
+    [Route("api/[controller]")]
+    [ApiController]
+    public class BillsController : ControllerBase
     {
-        _context = context;
+        private readonly BillingDbContext _context;
+
+        public BillsController(BillingDbContext context)
+        {
+            _context = context;
+        }
+
+        // POST: api/bills
+        [HttpPost]
+        public async Task<IActionResult> CreateBill([FromBody] CreateBillRequest request)
+        {
+            // 1. Tạo hóa đơn
+            var newBill = new Bill
+            {
+                PatientId = request.PatientId,
+                Status = "Pending"
+            };
+
+            // 2. Thêm dịch vụ
+            if (request.Items != null)
+            {
+                foreach (var item in request.Items)
+                {
+                    newBill.Items.Add(new BillItem
+                    {
+                        ServiceName = item.ServiceName,
+                        Price = item.Price,
+                        Quantity = item.Quantity
+                    });
+                }
+            }
+
+            // 3. Tính tiền
+            newBill.CalculateTotal();
+
+            // 4. Lưu DB
+            _context.Bills.Add(newBill);
+            await _context.SaveChangesAsync();
+
+            return Ok(newBill);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetBills()
+        {
+            // Lấy tất cả hóa đơn từ Database về
+            var bills = await _context.Bills.ToListAsync();
+            return Ok(bills);
+        }
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create(Guid patientId, decimal amount)
+    // Class DTO (Data Transfer Object) để nhận dữ liệu từ Frontend
+    public class CreateBillRequest
     {
-        var bill = new Bill(patientId, amount);
-        _context.Bills.Add(bill);
-        await _context.SaveChangesAsync();
-        return Ok(bill);
+        public Guid PatientId { get; set; }
+        public List<BillItemDto> Items { get; set; } = new List<BillItemDto>();
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public class BillItemDto
     {
-        var bills = await _context.Bills.ToListAsync();
-        return Ok(bills);
+        public string ServiceName { get; set; }
+        public decimal Price { get; set; }
+        public int Quantity { get; set; }
     }
 }
