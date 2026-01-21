@@ -23,7 +23,6 @@ builder.Services.AddDbContext<MedicalDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // B. Cấu hình CORS (Dùng code của nhóm - Bảo mật hơn)
-// Chỉ cho phép React (localhost:3000) truy cập, thay vì cho tất cả như code cũ của bạn
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
@@ -36,7 +35,6 @@ builder.Services.AddCors(options =>
 });
 
 // C. Cấu hình Authentication (Dùng code của nhóm - Chuẩn hơn)
-// Code nhóm đọc từ appsettings.json thay vì fix cứng key
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? "Key_Mac_Dinh_Du_Phong_Cho_Dev_Moi_123456789"; // Dự phòng nếu null
 var key = Encoding.UTF8.GetBytes(secretKey);
@@ -105,6 +103,26 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+// =========================================================================
+// 👇👇👇 [ĐOẠN CODE MỚI THÊM] TỰ ĐỘNG TẠO BẢNG DATABASE 👇👇👇
+// =========================================================================
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<MedicalDbContext>();
+        context.Database.Migrate(); // Tự động chạy lệnh update-database
+        Console.WriteLine("--> [MedicalRecord] Đã tự động tạo bảng thành công!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("--> [MedicalRecord] Lỗi tạo bảng: " + ex.Message);
+    }
+}
+// 👆👆👆 [KẾT THÚC ĐOẠN CODE MỚI] 👆👆👆
+// =========================================================================
 
 // ====================================================
 // 2. MIDDLEWARE PIPELINE

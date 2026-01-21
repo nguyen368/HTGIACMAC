@@ -1,9 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; 
+// import jwtDecode from "jwt-decode";  <-- ĐÃ XÓA DÒNG NÀY ĐỂ KHỎI BỊ LỖI
 import authApi from '../../../../api/authApi';
 import './AuthPage.css';
 import { useAuth } from '../../../../context/AuthContext';
+
+// --- HÀM GIẢI MÃ TOKEN THỦ CÔNG (KHÔNG CẦN THƯ VIỆN) ---
+const parseJwt = (token) => {
+    try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        return null;
+    }
+};
 
 const AuthPage = () => {
     const navigate = useNavigate();
@@ -105,10 +119,11 @@ const AuthPage = () => {
                 // 2. Cập nhật Context
                 if (login) await login(data);
 
-                // 3. GIẢI MÃ TOKEN & ĐIỀU HƯỚNG
+                // 3. GIẢI MÃ TOKEN BẰNG HÀM TỰ VIẾT (Thay vì jwt-decode)
                 let userRole = '';
                 try {
-                    const decoded = jwtDecode(data.token);
+                    const decoded = parseJwt(data.token); // <--- DÙNG HÀM MỚI TẠI ĐÂY
+                    
                     // Lấy Role: Ưu tiên key ngắn, dự phòng key dài của Microsoft
                     userRole = decoded.role || 
                                decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
@@ -124,14 +139,14 @@ const AuthPage = () => {
 
                 // 4. ĐIỀU HƯỚNG CHÍNH XÁC
                 if (role === 'admin' || role === 'administrator') {
-                    navigate('/admin');
+                    navigate('/admin/dashboard'); // Sửa lại đường dẫn cho đúng routing
                 } 
                 else if (role === 'doctor') {
-                    navigate('/doctor'); 
+                    navigate('/clinic/dashboard'); // Sửa lại đường dẫn cho đúng routing
                 }
                 else {
                     // Mặc định là Patient
-                    navigate('/patient/dashboard'); 
+                    navigate('/patient/home'); // Sửa lại đường dẫn cho đúng routing
                 } 
             }
         } catch (error) {
@@ -142,7 +157,7 @@ const AuthPage = () => {
         }
     };
 
-    // 4. Xử lý Đăng ký (Sửa Logic gửi Role Admin)
+    // 4. Xử lý Đăng ký
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
         const { fullName, email, password, confirmPassword, terms, accountType } = regData;
@@ -165,7 +180,7 @@ const AuthPage = () => {
             // [SỬA ĐỔI] Mapping Role Backend
             let roleToSend = 'Patient';
             if (accountType === 'Doctor') roleToSend = 'Doctor';
-            if (accountType === 'Admin') roleToSend = 'Admin'; // Gửi role Admin thay vì Clinic
+            if (accountType === 'Admin') roleToSend = 'Admin'; 
 
             await authApi.register({
                 username: email, 
@@ -202,7 +217,7 @@ const AuthPage = () => {
                 {/* Main Content */}
                 <div className="auth-main-content">
                     <div className="auth-card-container">
-                        {/* Welcome Section (Left) - GIỮ NGUYÊN */}
+                        {/* Welcome Section (Left) */}
                         <div className="welcome-section">
                             <h2>Phát hiện sớm nguy cơ bệnh lý qua hình ảnh võng mạc</h2>
                             <p>Hệ thống AURA sử dụng AI để phân tích mạch máu võng mạc, hỗ trợ bác sĩ trong việc phát hiện sớm các nguy cơ tim mạch, tiểu đường và đột quỵ.</p>
@@ -304,7 +319,6 @@ const AuthPage = () => {
                                             />
                                             <label htmlFor="doctor">Bác sĩ</label>
                                             
-                                            {/* [SỬA ĐỔI] Thay Clinic thành Admin */}
                                             <input 
                                                 type="radio" id="admin" name="account-type" value="Admin"
                                                 checked={regData.accountType === 'Admin'} onChange={handleRegChange}
@@ -362,8 +376,7 @@ const AuthPage = () => {
                                                 <i className={`fas ${showRegPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                                             </button>
                                         </div>
-                                        
-                                        {/* Password Requirements Checklist - GIỮ NGUYÊN */}
+                                        {/* Password Requirements */}
                                         <div className="password-requirements">
                                             <div className={`requirement ${passwordCriteria.length ? 'met' : 'not-met'}`}>
                                                 <i className={`fas ${passwordCriteria.length ? 'fa-check-circle' : 'fa-circle'}`}></i> Tối thiểu 8 ký tự
@@ -420,7 +433,7 @@ const AuthPage = () => {
                 </div>
             </div>
 
-            {/* Forgot Password Modal - GIỮ NGUYÊN */}
+            {/* Forgot Password Modal */}
             {showForgotPassword && (
                 <div className="auth-modal">
                     <div className="auth-modal-content">

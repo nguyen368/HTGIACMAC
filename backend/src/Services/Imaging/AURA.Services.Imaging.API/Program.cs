@@ -1,7 +1,11 @@
 using AURA.Services.Imaging.Application.Interfaces;
 using AURA.Services.Imaging.Infrastructure.Data;
 using AURA.Services.Imaging.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,49 +13,115 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<ImagingDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// --- [QUAN TRỌNG] Đăng ký HttpClient (Để gọi sang service AI Core Python) ---
+// 2. Đăng ký HttpClient (Để gọi sang service AI Core Python)
 builder.Services.AddHttpClient();
-// ----------------------------------------------------------------------------
 
-// --- [QUAN TRỌNG] Cấu hình CORS (Cho phép Frontend gọi vào) ---
+// 3. Cấu hình Authentication (JWT) - MỚI THÊM
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"] ?? "Key_Mac_Dinh_Du_Phong_Cho_Dev_Moi_123456789";
+var key = Encoding.UTF8.GetBytes(secretKey);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ClockSkew = TimeSpan.Zero
+    };
+});
+
+// 4. Cấu hình CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000") // Cho phép Frontend React
+            policy.WithOrigins("http://localhost:3000")
                   .AllowAnyMethod()
                   .AllowAnyHeader();
         });
 });
-// --------------------------------------------------------------
 
-// 2. Đăng ký Cloudinary Service (Dependency Injection)
+// 5. Đăng ký Cloudinary Service
 builder.Services.AddScoped<IImageUploader, CloudinaryUploader>();
 
-// 3. Các dịch vụ cơ bản API
+// 6. Các dịch vụ API & Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA Imaging API", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            new List<string>()
+        }
+    });
+});
 
 var app = builder.Build();
 
-// 4. Middleware
+// =========================================================================
+// 👇👇👇 [ĐOẠN CODE MỚI THÊM] TỰ ĐỘNG TẠO BẢNG DATABASE 👇👇👇
+// =========================================================================
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<ImagingDbContext>();
+        context.Database.Migrate(); // Tự động chạy lệnh update-database
+        Console.WriteLine("--> [Imaging] Đã tự động tạo bảng thành công!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("--> [Imaging] Lỗi tạo bảng: " + ex.Message);
+    }
+}
+// 👆👆👆 [KẾT THÚC ĐOẠN CODE MỚI] 👆👆👆
+// =========================================================================
+
+
+// 7. Middleware Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// --- [CHÚ Ý] Tắt HTTPS Redirection để tránh lỗi SSL ở môi trường dev ---
-// app.UseHttpsRedirection(); 
-// ----------------------------------------------------------------------
+// app.UseHttpsRedirection(); // Tắt HTTPS ở môi trường dev docker
 
-// --- [QUAN TRỌNG] Kích hoạt CORS (Đặt trước Auth/MapControllers) ---
 app.UseCors("AllowReactApp");
-// -------------------------------------------------------------------
 
+// QUAN TRỌNG: Thứ tự phải đúng (Auth -> Autho)
+app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

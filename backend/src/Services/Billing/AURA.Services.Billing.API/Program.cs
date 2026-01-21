@@ -21,6 +21,26 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// =========================================================================
+// 👇👇👇 [ĐOẠN CODE MỚI THÊM] TỰ ĐỘNG TẠO BẢNG DATABASE 👇👇👇
+// =========================================================================
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<BillingDbContext>();
+        context.Database.Migrate(); // Tự động chạy lệnh update-database
+        Console.WriteLine("--> [Billing] Đã tự động tạo bảng thành công!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("--> [Billing] Lỗi tạo bảng: " + ex.Message);
+    }
+}
+// 👆👆👆 [KẾT THÚC ĐOẠN CODE MỚI] 👆👆👆
+// =========================================================================
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

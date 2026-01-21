@@ -1,5 +1,5 @@
 services:
-  # 1. DATABASE CHUNG
+  # 1. DATABASE
   aura.db:
     image: postgres:15-alpine
     container_name: aura.db
@@ -9,7 +9,7 @@ services:
       - POSTGRES_PASSWORD=zxc123456
       - POSTGRES_DB=aura_identity_db
     ports:
-      - "5435:5432" # Map ra ngoài để debug local
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -57,6 +57,9 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_imaging_db;Username=admin;Password=zxc123456
+      - CloudinarySettings__CloudName=test
+      - CloudinarySettings__ApiKey=test
+      - CloudinarySettings__ApiSecret=test
     ports:
       - "5003:8080"
     depends_on:
@@ -88,15 +91,25 @@ services:
       dockerfile: backend/src/Services/Notification/AURA.Services.Notification.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - RabbitMQ__Host=rabbitmq  # Cấu hình host
     ports:
       - "5005:8080"
-    depends_on:
-      - rabbitmq  # <-- Thêm dòng này
     networks:
       - aura-network
 
-  # 7. API GATEWAY
+  # 7. AI CORE SERVICE
+  aicore-service:
+    container_name: aicore-service
+    build:
+      context: ../backend/src/Services/AICore
+      dockerfile: Dockerfile
+    environment:
+      - PORT=8001
+    ports:
+      - "8001:8001"
+    networks:
+      - aura-network
+
+  # 8. API GATEWAY
   gateway:
     image: nginx:latest
     container_name: aura-gateway
@@ -109,19 +122,30 @@ services:
       - medical-record-service
       - imaging-service
       - billing-service
+      - notification-service
+      - aicore-service
     networks:
       - aura-network
 
-  #RabbitMQ
-  rabbitmq:
-    image: masstransit/rabbitmq:latest
-    container_name: aura-rabbitmq
+  # 9. FRONTEND (Đã sửa lỗi volume)
+  frontend:
+    container_name: aura-frontend
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
     ports:
-      - "5672:5672"   # Port để code kết nối
-      - "15672:15672" # Port trang quản trị web
+      - "3000:3000"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules  # 👈 DÒNG QUAN TRỌNG NHẤT ĐỂ FIX LỖI 127
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_API_URL=http://localhost/api
+      - WDS_SOCKET_PORT=0
+    command: npm start
+      
+    restart: always
     networks:
       - aura-network
 
