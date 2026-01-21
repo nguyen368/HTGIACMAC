@@ -1,76 +1,62 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; 
+
+// Import Pages - Auth & Patient
 import AuthPage from '../modules/PatientWebApp/pages/Auth/AuthPage';
 import PatientLayout from '../modules/PatientWebApp/pages/Dashboard/PatientLayout';
+import PatientHome from '../modules/PatientWebApp/pages/Dashboard/PatientHome';
+import PatientProfile from '../modules/PatientWebApp/pages/Dashboard/PatientProfile';
+import PatientHistory from '../modules/PatientWebApp/pages/Dashboard/PatientHistory';
+import PatientUpload from '../modules/PatientWebApp/pages/Dashboard/PatientUpload';
+
+// Import Pages - Clinic (Doctor)
+import ClinicLayout from '../modules/ClinicWebApp/layouts/ClinicLayout';
+import ClinicDashboard from '../modules/ClinicWebApp/pages/Dashboard/ClinicDashboard';
 import DoctorWorkstation from '../modules/ClinicWebApp/pages/components/DoctorWorkstation';
+import ClinicUploadPage from '../modules/ClinicWebApp/pages/Upload/ClinicUploadPage';
+import ClinicExamDetail from '../modules/ClinicWebApp/pages/Exam/ClinicExamDetail';
 
-// Component bảo vệ Route (Giữ nguyên)
-const ProtectedRoute = ({ children, allowedRoles }) => {
-    const token = localStorage.getItem('token');
-    if (!token) return <Navigate to="/login" replace />;
-
-    try {
-        const decoded = jwtDecode(token);
-        const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
-        const userRole = (decoded[roleKey] || decoded.role || '').toLowerCase();
-        
-        // Chuẩn hóa roles cho phép về chữ thường
-        const normalizedAllowedRoles = allowedRoles.map(r => r.toLowerCase());
-
-        if (allowedRoles && !normalizedAllowedRoles.includes(userRole)) {
-            return <Navigate to="/login" replace />; 
-        }
-        return children;
-    } catch (error) {
-        localStorage.removeItem('token');
-        return <Navigate to="/login" replace />;
-    }
-};
+// Import Pages - Admin (MỚI)
+import AdminLayout from '../modules/AdminWebApp/layouts/AdminLayout';
+import AdminDashboard from '../modules/AdminWebApp/pages/Dashboard/AdminDashboard';
+import UserManagement from '../modules/AdminWebApp/pages/Users/UserManagement';
 
 const AppRoutes = () => {
-    return (
-        <Routes>
-            <Route path="/login" element={<AuthPage />} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
+  return (
+    <Routes>
+      {/* 1. Mặc định vào trang đăng nhập */}
+      <Route path="/" element={<Navigate to="/auth" replace />} />
+      <Route path="/auth" element={<AuthPage />} />
 
-            {/* 1. Route cho BÁC SĨ (Doctor) */}
-            <Route 
-                path="/doctor" 
-                element={
-                    <ProtectedRoute allowedRoles={['Doctor']}>
-                        <DoctorWorkstation />
-                    </ProtectedRoute>
-                } 
-            />
+      {/* 2. Routes cho Bệnh nhân */}
+      <Route path="/patient" element={<PatientLayout />}>
+        <Route index element={<Navigate to="home" replace />} />
+        <Route path="home" element={<PatientHome />} />
+        <Route path="profile" element={<PatientProfile />} />
+        <Route path="history" element={<PatientHistory />} />
+        <Route path="upload" element={<PatientUpload />} />
+      </Route>
 
-            {/* 2. Route cho BỆNH NHÂN (Patient) */}
-            <Route 
-                path="/patient/dashboard" 
-                element={
-                    <ProtectedRoute allowedRoles={['Patient']}>
-                        <PatientLayout />
-                    </ProtectedRoute>
-                } 
-            />
+      {/* 3. Routes cho Phòng khám/Bác sĩ */}
+      <Route path="/clinic" element={<ClinicLayout />}>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<ClinicDashboard />} />
+        <Route path="doctor-workstation" element={<DoctorWorkstation />} />
+        <Route path="upload" element={<ClinicUploadPage />} />
+        <Route path="exam/:examId" element={<ClinicExamDetail />} />
+      </Route>
 
-            {/* 3. Route cho ADMIN (Thay cho Clinic) */}
-            <Route 
-                path="/admin" 
-                element={
-                    <ProtectedRoute allowedRoles={['Admin', 'Administrator']}>
-                        <div style={{padding: '50px', textAlign: 'center'}}>
-                            <h1>🛡️ TRANG QUẢN TRỊ ADMIN</h1>
-                            <p>Đây là khu vực dành riêng cho Admin hệ thống.</p>
-                            <p>Chức năng: Quản lý người dùng, xem thống kê hệ thống, v.v.</p>
-                        </div>
-                    </ProtectedRoute>
-                } 
-            />
+      {/* 4. Routes cho Admin (MỚI THÊM) */}
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="users" element={<UserManagement />} />
+      </Route>
 
-            <Route path="*" element={<div>404 Not Found</div>} />
-        </Routes>
-    );
+      {/* 5. Trang 404 */}
+      <Route path="*" element={<Navigate to="/auth" replace />} />
+    </Routes>
+  );
 };
 
 export default AppRoutes;
