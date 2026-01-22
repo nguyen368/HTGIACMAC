@@ -19,9 +19,8 @@ const AuthPage = () => {
     // State dữ liệu Login
     const [loginData, setLoginData] = useState({ email: '', password: '', remember: false });
     
-    // State dữ liệu Register
+    // State dữ liệu Register (Giữ nguyên cấu trúc của bạn)
     const [regData, setRegData] = useState({
-        accountType: 'Patient', 
         fullName: '',
         email: '',
         phone: '+84',
@@ -40,7 +39,6 @@ const AuthPage = () => {
 
     // --- LOGIC XỬ LÝ ---
 
-    // 1. Cập nhật input Login
     const handleLoginChange = (e) => {
         const { id, value, checked, type } = e.target;
         setLoginData(prev => ({
@@ -49,16 +47,8 @@ const AuthPage = () => {
         }));
     };
 
-    // 2. Cập nhật input Register & Validate Password
     const handleRegChange = (e) => {
         const { name, value, checked, type } = e.target;
-        
-        // Xử lý radio group account type
-        if (name === 'account-type') {
-            setRegData(prev => ({ ...prev, accountType: value }));
-            return;
-        }
-
         const fieldName = name || e.target.id; 
         
         setRegData(prev => ({
@@ -66,7 +56,6 @@ const AuthPage = () => {
             [fieldName]: type === 'checkbox' ? checked : value
         }));
 
-        // Validate mật khẩu realtime
         if (fieldName === 'password') {
             validatePassword(value);
         }
@@ -81,7 +70,6 @@ const AuthPage = () => {
         });
     };
 
-    // 3. Xử lý Đăng nhập (Logic điều hướng 3 trang)
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
         if (!loginData.email || !loginData.password) {
@@ -99,17 +87,16 @@ const AuthPage = () => {
             const data = res.data.value || res.data;
             
             if (data?.token) {
-                // 1. Lưu token vào Storage
-                localStorage.setItem('token', data.token);
+                // 1. Đồng bộ hóa Token với AuthContext (Sử dụng key thống nhất aura_token)
+                localStorage.setItem('aura_token', data.token);
 
-                // 2. Cập nhật Context
+                // 2. Cập nhật Context (Lưu user vào database trình duyệt)
                 if (login) await login(data);
 
-                // 3. GIẢI MÃ TOKEN & ĐIỀU HƯỚNG
+                // 3. GIẢI MÃ TOKEN & ĐIỀU HƯỚNG (Giữ logic role của bạn)
                 let userRole = '';
                 try {
                     const decoded = jwtDecode(data.token);
-                    // Lấy Role: Ưu tiên key ngắn, dự phòng key dài của Microsoft
                     userRole = decoded.role || 
                                decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
                                'patient'; 
@@ -118,7 +105,6 @@ const AuthPage = () => {
                     userRole = 'patient';
                 }
                 
-                // Chuẩn hóa về chữ thường để so sánh
                 const role = String(userRole).toLowerCase();
                 console.log("👉 Đăng nhập thành công với Role:", role);
 
@@ -130,7 +116,6 @@ const AuthPage = () => {
                     navigate('/doctor'); 
                 }
                 else {
-                    // Mặc định là Patient
                     navigate('/patient/dashboard'); 
                 } 
             }
@@ -142,10 +127,9 @@ const AuthPage = () => {
         }
     };
 
-    // 4. Xử lý Đăng ký (Sửa Logic gửi Role Admin)
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
-        const { fullName, email, password, confirmPassword, terms, accountType } = regData;
+        const { fullName, email, password, confirmPassword, terms } = regData;
 
         if (!fullName || !email || !password || !confirmPassword) {
             alert('Vui lòng nhập đầy đủ thông tin!'); return;
@@ -162,17 +146,12 @@ const AuthPage = () => {
 
         setIsLoading(true);
         try {
-            // [SỬA ĐỔI] Mapping Role Backend
-            let roleToSend = 'Patient';
-            if (accountType === 'Doctor') roleToSend = 'Doctor';
-            if (accountType === 'Admin') roleToSend = 'Admin'; // Gửi role Admin thay vì Clinic
-
             await authApi.register({
                 username: email, 
                 email: email,
                 password: password,
                 fullName: fullName,
-                role: roleToSend
+                role: 'Patient' 
             });
 
             alert('Đăng ký thành công! Vui lòng đăng nhập.');
@@ -187,7 +166,7 @@ const AuthPage = () => {
     return (
         <div className="auth-page-wrapper">
             <div className="auth-page-container">
-                {/* Header */}
+                {/* Header - Giữ nguyên giao diện của bạn */}
                 <div className="auth-header">
                     <div className="auth-logo">
                         <div className="auth-logo-icon"></div>
@@ -202,7 +181,7 @@ const AuthPage = () => {
                 {/* Main Content */}
                 <div className="auth-main-content">
                     <div className="auth-card-container">
-                        {/* Welcome Section (Left) - GIỮ NGUYÊN */}
+                        {/* Welcome Section - Giữ nguyên list tính năng */}
                         <div className="welcome-section">
                             <h2>Phát hiện sớm nguy cơ bệnh lý qua hình ảnh võng mạc</h2>
                             <p>Hệ thống AURA sử dụng AI để phân tích mạch máu võng mạc, hỗ trợ bác sĩ trong việc phát hiện sớm các nguy cơ tim mạch, tiểu đường và đột quỵ.</p>
@@ -214,68 +193,38 @@ const AuthPage = () => {
                             </ul>
                         </div>
 
-                        {/* Auth Forms (Right) */}
+                        {/* Auth Forms */}
                         <div className="auth-forms-section">
-                            {/* Tabs */}
                             <div className="auth-tabs">
-                                <div 
-                                    className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('login')}
-                                >
-                                    Đăng nhập
-                                </div>
-                                <div 
-                                    className={`auth-tab ${activeTab === 'register' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('register')}
-                                >
-                                    Đăng ký
-                                </div>
+                                <div className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`} onClick={() => setActiveTab('login')}>Đăng nhập</div>
+                                <div className={`auth-tab ${activeTab === 'register' ? 'active' : ''}`} onClick={() => setActiveTab('register')}>Đăng ký</div>
                             </div>
 
-                            {/* --- LOGIN FORM --- */}
                             {activeTab === 'login' && (
                                 <form className="auth-form" onSubmit={handleLoginSubmit}>
                                     <h3 className="auth-form-title">Đăng nhập tài khoản</h3>
-                                    
                                     <div className="form-group">
                                         <label>Email hoặc Số điện thoại</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-user"></i>
-                                            <input 
-                                                type="text" id="email" 
-                                                placeholder="Nhập email"
-                                                value={loginData.email} onChange={handleLoginChange}
-                                            />
+                                            <input type="text" id="email" placeholder="Nhập email" value={loginData.email} onChange={handleLoginChange} />
                                         </div>
                                     </div>
-                                    
                                     <div className="form-group">
                                         <label>Mật khẩu</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-lock"></i>
-                                            <input 
-                                                type={showLoginPassword ? "text" : "password"} id="password"
-                                                placeholder="Nhập mật khẩu"
-                                                value={loginData.password} onChange={handleLoginChange}
-                                            />
+                                            <input type={showLoginPassword ? "text" : "password"} id="password" placeholder="Nhập mật khẩu" value={loginData.password} onChange={handleLoginChange} />
                                             <button type="button" className="password-toggle" onClick={() => setShowLoginPassword(!showLoginPassword)}>
                                                 <i className={`fas ${showLoginPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                                             </button>
                                         </div>
                                     </div>
-                                    
                                     <div className="checkbox-group">
-                                        <input 
-                                            type="checkbox" id="remember" 
-                                            checked={loginData.remember} onChange={handleLoginChange}
-                                        />
+                                        <input type="checkbox" id="remember" checked={loginData.remember} onChange={handleLoginChange} />
                                         <label htmlFor="remember">Ghi nhớ đăng nhập</label>
                                     </div>
-                                    
-                                    <button type="submit" className="auth-btn" disabled={isLoading}>
-                                        {isLoading ? 'Đang xử lý...' : 'Đăng nhập'}
-                                    </button>
-                                    
+                                    <button type="submit" className="auth-btn" disabled={isLoading}>{isLoading ? 'Đang xử lý...' : 'Đăng nhập'}</button>
                                     <div className="auth-links">
                                         <span className="auth-link" onClick={() => setShowForgotPassword(true)}>Quên mật khẩu?</span>
                                         <span> | </span>
@@ -284,143 +233,70 @@ const AuthPage = () => {
                                 </form>
                             )}
 
-                            {/* --- REGISTER FORM --- */}
                             {activeTab === 'register' && (
                                 <form className="auth-form" onSubmit={handleRegisterSubmit}>
-                                    <h3 className="auth-form-title">Tạo tài khoản mới</h3>
-                                    
-                                    <div className="form-group">
-                                        <label>Loại tài khoản</label>
-                                        <div className="account-type">
-                                            <input 
-                                                type="radio" id="patient" name="account-type" value="Patient"
-                                                checked={regData.accountType === 'Patient'} onChange={handleRegChange}
-                                            />
-                                            <label htmlFor="patient">Bệnh nhân</label>
-                                            
-                                            <input 
-                                                type="radio" id="doctor" name="account-type" value="Doctor"
-                                                checked={regData.accountType === 'Doctor'} onChange={handleRegChange}
-                                            />
-                                            <label htmlFor="doctor">Bác sĩ</label>
-                                            
-                                            {/* [SỬA ĐỔI] Thay Clinic thành Admin */}
-                                            <input 
-                                                type="radio" id="admin" name="account-type" value="Admin"
-                                                checked={regData.accountType === 'Admin'} onChange={handleRegChange}
-                                            />
-                                            <label htmlFor="admin">Admin</label>
-                                        </div>
-                                    </div>
-                                    
+                                    <h3 className="auth-form-title">Tạo tài khoản bệnh nhân</h3>
                                     <div className="form-group">
                                         <label>Họ và tên</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-user"></i>
-                                            <input 
-                                                type="text" name="fullName" 
-                                                placeholder="Nhập họ và tên đầy đủ"
-                                                value={regData.fullName} onChange={handleRegChange}
-                                            />
+                                            <input type="text" name="fullName" placeholder="Nhập họ và tên đầy đủ" value={regData.fullName} onChange={handleRegChange} />
                                         </div>
                                     </div>
-                                    
                                     <div className="form-group">
                                         <label>Email</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-envelope"></i>
-                                            <input 
-                                                type="email" name="email" 
-                                                placeholder="Nhập địa chỉ email"
-                                                value={regData.email} onChange={handleRegChange}
-                                            />
+                                            <input type="email" name="email" placeholder="Nhập địa chỉ email" value={regData.email} onChange={handleRegChange} />
                                         </div>
                                     </div>
-                                    
                                     <div className="form-group">
                                         <label>Số điện thoại</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-phone"></i>
-                                            <input 
-                                                type="tel" name="phone" 
-                                                placeholder="Nhập số điện thoại"
-                                                value={regData.phone} onChange={handleRegChange}
-                                            />
+                                            <input type="tel" name="phone" placeholder="Nhập số điện thoại" value={regData.phone} onChange={handleRegChange} />
                                         </div>
                                     </div>
-                                    
                                     <div className="form-group">
                                         <label>Mật khẩu</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-lock"></i>
-                                            <input 
-                                                type={showRegPassword ? "text" : "password"} name="password"
-                                                placeholder="Nhập mật khẩu (tối thiểu 8 ký tự)"
-                                                value={regData.password} onChange={handleRegChange}
-                                            />
+                                            <input type={showRegPassword ? "text" : "password"} name="password" placeholder="Nhập mật khẩu (tối thiểu 8 ký tự)" value={regData.password} onChange={handleRegChange} />
                                             <button type="button" className="password-toggle" onClick={() => setShowRegPassword(!showRegPassword)}>
                                                 <i className={`fas ${showRegPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                                             </button>
                                         </div>
-                                        
-                                        {/* Password Requirements Checklist - GIỮ NGUYÊN */}
                                         <div className="password-requirements">
-                                            <div className={`requirement ${passwordCriteria.length ? 'met' : 'not-met'}`}>
-                                                <i className={`fas ${passwordCriteria.length ? 'fa-check-circle' : 'fa-circle'}`}></i> Tối thiểu 8 ký tự
-                                            </div>
-                                            <div className={`requirement ${passwordCriteria.case ? 'met' : 'not-met'}`}>
-                                                <i className={`fas ${passwordCriteria.case ? 'fa-check-circle' : 'fa-circle'}`}></i> Chứa chữ hoa và chữ thường
-                                            </div>
-                                            <div className={`requirement ${passwordCriteria.number ? 'met' : 'not-met'}`}>
-                                                <i className={`fas ${passwordCriteria.number ? 'fa-check-circle' : 'fa-circle'}`}></i> Có ít nhất 1 số
-                                            </div>
-                                            <div className={`requirement ${passwordCriteria.special ? 'met' : 'not-met'}`}>
-                                                <i className={`fas ${passwordCriteria.special ? 'fa-check-circle' : 'fa-circle'}`}></i> Có ít nhất 1 ký tự đặc biệt
-                                            </div>
+                                            <div className={`requirement ${passwordCriteria.length ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.length ? 'fa-check-circle' : 'fa-circle'}`}></i> Tối thiểu 8 ký tự</div>
+                                            <div className={`requirement ${passwordCriteria.case ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.case ? 'fa-check-circle' : 'fa-circle'}`}></i> Chứa chữ hoa và chữ thường</div>
+                                            <div className={`requirement ${passwordCriteria.number ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.number ? 'fa-check-circle' : 'fa-circle'}`}></i> Có ít nhất 1 số</div>
+                                            <div className={`requirement ${passwordCriteria.special ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.special ? 'fa-check-circle' : 'fa-circle'}`}></i> Có ít nhất 1 ký tự đặc biệt</div>
                                         </div>
                                     </div>
-                                    
                                     <div className="form-group">
                                         <label>Xác nhận mật khẩu</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-lock"></i>
-                                            <input 
-                                                type="password" name="confirmPassword"
-                                                placeholder="Nhập lại mật khẩu"
-                                                value={regData.confirmPassword} onChange={handleRegChange}
-                                            />
+                                            <input type="password" name="confirmPassword" placeholder="Nhập lại mật khẩu" value={regData.confirmPassword} onChange={handleRegChange} />
                                         </div>
                                     </div>
-                                    
                                     <div className="checkbox-group">
-                                        <input 
-                                            type="checkbox" name="terms" id="terms"
-                                            checked={regData.terms} onChange={handleRegChange}
-                                        />
-                                        <label htmlFor="terms">Tôi đồng ý với <span className="auth-link">Điều khoản dịch vụ</span> và <span className="auth-link">Chính sách bảo mật</span></label>
+                                        <input type="checkbox" name="terms" id="terms" checked={regData.terms} onChange={handleRegChange} />
+                                        <label htmlFor="terms">Tôi đồng ý với Điều khoản dịch vụ</label>
                                     </div>
-                                    
-                                    <button type="submit" className="auth-btn" disabled={isLoading}>
-                                        {isLoading ? 'Đang xử lý...' : 'Đăng ký tài khoản'}
-                                    </button>
-                                    
-                                    <div className="auth-links">
-                                        <span className="auth-link" onClick={() => setActiveTab('login')}>Đã có tài khoản? Đăng nhập ngay</span>
-                                    </div>
+                                    <button type="submit" className="auth-btn" disabled={isLoading}>{isLoading ? 'Đang xử lý...' : 'Đăng ký tài khoản'}</button>
                                 </form>
                             )}
                         </div>
                     </div>
                 </div>
 
-                {/* Footer */}
                 <div className="auth-footer">
                     <p>© 2024 AURA Screening. Hệ thống sàng lọc sức khỏe mạch máu võng mạc.</p>
                     <p>Phát triển bởi nhóm nghiên cứu SP26SE025</p>
                 </div>
             </div>
 
-            {/* Forgot Password Modal - GIỮ NGUYÊN */}
             {showForgotPassword && (
                 <div className="auth-modal">
                     <div className="auth-modal-content">
@@ -429,26 +305,17 @@ const AuthPage = () => {
                             <button className="close-modal-btn" onClick={() => setShowForgotPassword(false)}>&times;</button>
                         </div>
                         <p>Vui lòng nhập email đã đăng ký để nhận liên kết khôi phục mật khẩu:</p>
-                        
                         <div className="form-group" style={{marginTop: '20px'}}>
                             <div className="input-with-icon">
                                 <i className="fas fa-envelope"></i>
                                 <input type="email" placeholder="Nhập địa chỉ email" />
                             </div>
                         </div>
-                        
                         <button className="auth-btn" style={{marginTop: '20px'}}>Gửi link khôi phục</button>
-                        
                         <div style={{textAlign: 'center', marginTop: '20px'}}>
                             <p>Hoặc</p>
-                            <button className="auth-btn" style={{backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ddd'}}>
-                                Xác thực bằng số điện thoại
-                            </button>
+                            <button className="auth-btn" style={{backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ddd'}}>Xác thực bằng số điện thoại</button>
                         </div>
-                        
-                        <p style={{marginTop: '20px', fontSize: '14px', color: '#666', textAlign: 'center'}}>
-                            Liên kết sẽ được gửi đến email trong vòng 5 phút
-                        </p>
                     </div>
                 </div>
             )}

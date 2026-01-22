@@ -5,11 +5,14 @@ using AURA.Services.Imaging.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.IO.Compression;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json; 
+using MassTransit; // THÊM THƯ VIỆN NÀY
 
 namespace AURA.Services.Imaging.API.Controllers;
+
+// Định nghĩa cấu trúc tin nhắn để RabbitMQ hiểu
+public record ImageUploadedEvent(Guid ImageId, string ImageUrl, Guid PatientId, Guid ClinicId);
 
 [ApiController]
 [Route("api/imaging")]
@@ -18,63 +21,65 @@ public class ImagesController : ControllerBase
     private readonly IImageUploader _uploader;
     private readonly ImagingDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IPublishEndpoint _publishEndpoint; // THÊM IPublishEndpoint
 
-    public ImagesController(
-        IImageUploader uploader, 
-        ImagingDbContext context,
-        IHttpClientFactory httpClientFactory)
+    public ImagesController(IImageUploader uploader, ImagingDbContext context, IHttpClientFactory httpClientFactory, IPublishEndpoint publishEndpoint)
     {
         _uploader = uploader;
         _context = context;
         _httpClientFactory = httpClientFactory;
+        _publishEndpoint = publishEndpoint; // Gán vào biến
     }
 
-    private class AiValidationResponse
-    {
-        [JsonPropertyName("is_valid")] public bool IsValid { get; set; }
-        [JsonPropertyName("message")] public string? Message { get; set; }
+    private class AiDiagnosisResponse {
+        [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
+        [JsonPropertyName("diagnosis")] public string Diagnosis { get; set; } = string.Empty;
+        [JsonPropertyName("risk_score")] public double RiskScore { get; set; }
+        [JsonPropertyName("risk_level")] public string RiskLevel { get; set; } = string.Empty;
+        [JsonPropertyName("heatmap_url")] public string HeatmapUrl { get; set; } = string.Empty;
+        [JsonPropertyName("metadata")] public object? Metadata { get; set; } 
     }
 
-    private async Task<(bool IsValid, string Reason)> ValidateImageWithAi(string fileName)
-    {
-        try 
-        {
+    private async Task<AiDiagnosisResponse?> CallAiDiagnosis(string fileName, string imageUrl) {
+        try {
             var client = _httpClientFactory.CreateClient();
-            string aiServiceUrl = "http://localhost:8000/api/ai/validate-eye"; 
-            var payload = new { file_name = fileName, image_url = "" };
-            var response = await client.PostAsJsonAsync(aiServiceUrl, payload);
-            if (!response.IsSuccessStatusCode) return (true, "AI Warning: Skip Check");
-            var result = await response.Content.ReadFromJsonAsync<AiValidationResponse>();
-            return (result?.IsValid ?? true, result?.Message ?? "Unknown");
-        }
-        catch { return (true, "AI Error"); }
+            string aiUrl = "http://localhost:5006/api/ai/auto-diagnosis"; 
+            var response = await client.PostAsJsonAsync(aiUrl, new { file_name = fileName, image_url = imageUrl });
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<AiDiagnosisResponse>() : null;
+        } catch { return null; }
     }
 
-    private async Task NotifyUploadSuccess(Guid patientId, int count)
+    [HttpPost("upload")]
+    public async Task<IActionResult> Upload([FromForm] UploadImageRequest request)
     {
-        try
-        {
-            var client = _httpClientFactory.CreateClient();
-            string notiUrl = "http://localhost:5005/api/notifications/send"; 
-            var notification = new 
-            {
-                Title = "Dữ liệu hình ảnh mới",
-                Message = $"Hệ thống vừa nhận được {count} ảnh chụp đáy mắt mới của bệnh nhân {patientId}.",
-                Type = "Info",
-                UserId = Guid.Empty 
-            };
-            _ = client.PostAsJsonAsync(notiUrl, notification);
-        }
-        catch (Exception ex) { Console.WriteLine($"Warning: Không gửi được thông báo. {ex.Message}"); }
+        if (request.File == null || request.File.Length == 0) return BadRequest("File rỗng");
+        try {
+            var result = await _uploader.UploadAsync(request.File);
+            var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
+            _context.Images.Add(image);
+            await _context.SaveChangesAsync();
+
+            // 1. Vẫn giữ logic gọi AI trực tiếp nếu bạn muốn (Code cũ)
+            var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
+            
+            // 2. NHƯNG THÊM DÒNG NÀY ĐỂ RABBITMQ NHẢY SỐ (Xử lý bất đồng bộ)
+            await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, result.Url, request.PatientId, request.ClinicId));
+
+            string finalStatus = (aiResult != null && aiResult.Status == "Rejected") ? "Rejected" : "Success";
+
+            return Ok(new { 
+                Message = finalStatus == "Rejected" ? "Ảnh bị từ chối" : "Upload thành công và đã gửi tin nhắn xử lý", 
+                Details = new[] { new { 
+                    FileName = request.File.FileName, Status = finalStatus, Url = result.Url, Id = image.Id, AiDiagnosis = aiResult 
+                }}
+            });
+        } catch (Exception ex) { return StatusCode(500, ex.Message); }
     }
 
-    // --- 1. API UPLOAD HÀNG LOẠT (ZIP) ---
     [HttpPost("batch-upload")]
     public async Task<IActionResult> BatchUpload(IFormFile zipFile, [FromForm] Guid clinicId, [FromForm] Guid patientId)
     {
         if (zipFile == null || zipFile.Length == 0) return BadRequest("File rỗng");
-        if (Path.GetExtension(zipFile.FileName).ToLower() != ".zip") return BadRequest("Phải là file .zip");
-
         var results = new List<object>();
         int successCount = 0;
 
@@ -87,118 +92,42 @@ public class ImagesController : ControllerBase
                 var ext = Path.GetExtension(entry.Name).ToLower();
                 if (ext != ".jpg" && ext != ".png" && ext != ".jpeg") continue;
 
-                try 
-                {
-                    var (isValid, reason) = await ValidateImageWithAi(entry.Name);
-                    if (!isValid) { results.Add(new { FileName = entry.Name, Status = "Rejected", Error = reason }); continue; }
-
+                try {
                     using (var entryStream = entry.Open())
-                    using (var memoryStream = new MemoryStream())
-                    {
+                    using (var memoryStream = new MemoryStream()) {
                         await entryStream.CopyToAsync(memoryStream);
                         memoryStream.Position = 0;
-                        var uploadResult = await _uploader.UploadStreamAsync(memoryStream, entry.Name);
-
-                        if (!string.IsNullOrEmpty(uploadResult.Url))
-                        {
-                            var image = new ImageMetadata(patientId, clinicId, uploadResult.Url, uploadResult.PublicId);
+                        var uploadRes = await _uploader.UploadStreamAsync(memoryStream, entry.Name);
+                        if (!string.IsNullOrEmpty(uploadRes.Url)) {
+                            var image = new ImageMetadata(patientId, clinicId, uploadRes.Url, uploadRes.PublicId);
                             _context.Images.Add(image);
-                            results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadResult.Url, AiNote = "AI Passed", Id = image.Id }); // [Update] Return ID
+                            await _context.SaveChangesAsync(); // Lưu để lấy ID
+                            
+                            // BẮN TIN NHẮN CHO TỪNG ẢNH TRONG LÔ (Batch Processing)
+                            await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, uploadRes.Url, patientId, clinicId));
+
+                            results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadRes.Url }); 
                             successCount++;
                         }
                     }
-                }
-                catch (Exception ex) { results.Add(new { FileName = entry.Name, Status = "Failed", Error = ex.Message }); }
+                } catch { }
             }
         }
-
-        if (successCount > 0) 
-        {
-            await _context.SaveChangesAsync();
-            await NotifyUploadSuccess(patientId, successCount);
-        }
-        
-        return Ok(new { Message = $"Hoàn tất. Thành công: {successCount}", Details = results });
+        return Ok(new { Message = $"Hoàn tất: {successCount} ảnh đã được đưa vào hàng chờ RabbitMQ", Details = results });
     }
 
-    // --- 2. API UPLOAD ĐƠN LẺ ---
-    [HttpPost("upload")]
-    public async Task<IActionResult> Upload([FromForm] UploadImageRequest request)
-    {
-        if (request.File == null || request.File.Length == 0) return BadRequest("File rỗng");
-        var results = new List<object>(); 
-
-        var (isValid, reason) = await ValidateImageWithAi(request.File.FileName);
-        if (!isValid) 
-        {
-            results.Add(new { FileName = request.File.FileName, Status = "Rejected", Error = reason });
-            return Ok(new { Message = "Ảnh bị từ chối bởi AI", Details = results });
-        }
-
-        try 
-        {
-            var result = await _uploader.UploadAsync(request.File);
-            var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
-            _context.Images.Add(image);
-            await _context.SaveChangesAsync();
-
-            await NotifyUploadSuccess(request.PatientId, 1);
-
-            // [Update] Trả về ID để frontend chuyển trang
-            results.Add(new { FileName = request.File.FileName, Status = "Success", Url = result.Url, AiNote = "AI Passed", Id = image.Id });
-            return Ok(new { Message = "Upload thành công", Details = results });
-        }
-        catch (Exception ex)
-        {
-            results.Add(new { FileName = request.File.FileName, Status = "Failed", Error = ex.Message });
-            return StatusCode(500, new { Message = "Lỗi Server", Details = results });
-        }
-    }
-
-    // --- 3. API THỐNG KÊ ---
     [HttpGet("stats/{clinicId}")]
-    public async Task<IActionResult> GetClinicStats(Guid clinicId)
-    {
-        var totalImages = await _context.Images.CountAsync(i => i.ClinicId == clinicId);
-        var recentUploads = await _context.Images.Where(i => i.ClinicId == clinicId).OrderByDescending(i => i.UploadedAt).Take(5)
+    public async Task<IActionResult> GetClinicStats(Guid clinicId) {
+        var total = await _context.Images.CountAsync(i => i.ClinicId == clinicId);
+        var recent = await _context.Images.Where(i => i.ClinicId == clinicId).OrderByDescending(i => i.UploadedAt).Take(5)
             .Select(i => new { i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm") }).ToListAsync();
-        return Ok(new { Summary = new { TotalScans = totalImages }, RecentActivity = recentUploads });
+        return Ok(new { Summary = new { TotalScans = total }, RecentActivity = recent });
     }
 
-    // --- 4. LẤY ẢNH BỆNH NHÂN ---
     [HttpGet("patient/{patientId}")]
-    public async Task<IActionResult> GetImagesByPatient(Guid patientId)
-    {
+    public async Task<IActionResult> GetImagesByPatient(Guid patientId) {
         var images = await _context.Images.Where(i => i.PatientId == patientId).OrderByDescending(i => i.UploadedAt)
             .Select(i => new { i.Id, i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm"), FileName = "Ảnh đáy mắt" }).ToListAsync();
         return Ok(images);
-    }
-
-    // --- 5. XÓA ẢNH ---
-    [HttpDelete("{imageId}")]
-    public async Task<IActionResult> DeleteImage(Guid imageId)
-    {
-        var image = await _context.Images.FindAsync(imageId);
-        if (image == null) return NotFound(new { Message = "Không tìm thấy ảnh" });
-        _context.Images.Remove(image);
-        await _context.SaveChangesAsync();
-        return Ok(new { Message = "Đã xóa ảnh thành công" });
-    }
-
-    // --- 6. [MỚI] LẤY CHI TIẾT 1 ẢNH ---
-    [HttpGet("{imageId}")]
-    public async Task<IActionResult> GetImageDetail(Guid imageId)
-    {
-        var image = await _context.Images.FindAsync(imageId);
-        if (image == null) return NotFound(new { Message = "Không tìm thấy ảnh" });
-
-        return Ok(new 
-        { 
-            image.Id, 
-            image.ImageUrl, 
-            image.PatientId, 
-            UploadedAt = image.UploadedAt.ToString("dd/MM/yyyy HH:mm"),
-            AiPrediction = "Chưa có kết quả phân tích (Demo)" // Sau này sẽ lấy từ AI Service
-        });
     }
 }

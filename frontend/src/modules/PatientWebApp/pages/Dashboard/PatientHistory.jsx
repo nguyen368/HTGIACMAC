@@ -6,92 +6,94 @@ const PatientHistory = () => {
     const { user } = useAuth();
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedItem, setSelectedItem] = useState(null);
 
-    useEffect(() => {
-        if (user) {
-            imagingApi.getImagesByPatient(user.id)
-                .then(data => {
-                    if (Array.isArray(data)) setHistory(data);
-                    else setHistory([]);
-                })
-                .catch(console.error)
-                .finally(() => setLoading(false));
+    const fetchHistory = async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const patientId = user.id || user.userId;
+            const data = await imagingApi.getImagesByPatient(patientId);
+            const list = Array.isArray(data) ? data : (data.data || []);
+            setHistory([...list].reverse());
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
         }
-    }, [user]);
+    };
 
-    if (loading) return <div style={{padding: '40px', textAlign: 'center'}}>Đang tải dữ liệu...</div>;
+    useEffect(() => { fetchHistory(); }, [user]);
+
+    const handleDelete = async (e, id) => {
+        e.stopPropagation();
+        if (!window.confirm("Bạn có muốn xóa kết quả này không?")) return;
+        try {
+            await imagingApi.deleteImage(id);
+            alert("✅ Đã xóa thành công!");
+            fetchHistory();
+        } catch (err) { alert("❌ Lỗi khi xóa"); }
+    };
+
+    // HÀM FORMAT NGÀY AN TOÀN
+    const formatDate = (dateStr) => {
+        const d = new Date(dateStr || Date.now());
+        return isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString('vi-VN');
+    };
+
+    const renderDetailModal = () => {
+        if (!selectedItem) return null;
+        const diag = selectedItem.aiDiagnosis || {};
+        const isRej = selectedItem.status === 'Rejected' || diag.risk_level === 'Invalid';
+
+        return (
+            <div className="modal-overlay" style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'}} onClick={() => setSelectedItem(null)}>
+                <div className="modal-content" style={{background: 'white', padding: '20px', borderRadius: '12px', width: '90%', maxWidth: '800px'}} onClick={e => e.stopPropagation()}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
+                        <h3>Chi tiết chẩn đoán</h3>
+                        <button onClick={() => setSelectedItem(null)} style={{border:'none', fontSize:'20px'}}>&times;</button>
+                    </div>
+                    <div style={{display: 'flex', gap: '20px'}}>
+                        <img src={selectedItem.imageUrl} style={{width: '50%', borderRadius: '8px', background: '#000'}} alt="Gốc" />
+                        <div style={{flex: 1}}>
+                            <p><strong>Ngày chụp:</strong> {formatDate(selectedItem.uploadedAt)}</p>
+                            <p><strong>Kết luận:</strong> <span style={{color: isRej ? 'red' : 'blue'}}>{diag.diagnosis || "N/A"}</span></p>
+                            {diag.heatmap_url && <img src={diag.heatmap_url} style={{width: '100%', marginTop: '10px', borderRadius: '8px', background: '#000'}} alt="Heatmap" />}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    if (loading) return <div style={{padding: '40px', textAlign: 'center'}}>Đang tải...</div>;
 
     return (
         <div className="pro-card">
             <div className="card-header">
-                <div>
-                    <h3>Lịch sử chẩn đoán</h3>
-                    <p className="subtitle">Danh sách các lần sàng lọc trước đây.</p>
-                </div>
+                <h3>Lịch sử khám bệnh</h3>
+                <button className="btn-save" onClick={fetchHistory} style={{background: '#eee', color: '#333'}}><i className="fas fa-sync"></i></button>
             </div>
-
             <div className="table-container">
-                {history.length === 0 ? (
-                    <div style={{padding: '40px', textAlign: 'center', color: '#94a3b8'}}>
-                        <i className="fas fa-folder-open" style={{fontSize: '48px', marginBottom: '16px'}}></i>
-                        <p>Chưa có dữ liệu khám bệnh.</p>
-                    </div>
-                ) : (
-                    <table className="modern-table">
-                        <thead>
-                            <tr>
-                                <th>Hình ảnh</th>
-                                <th>Ngày thực hiện</th>
-                                <th>Trạng thái</th>
-                                <th>Kết quả AI</th>
-                                <th>Hành động</th>
+                <table className="modern-table">
+                    <thead>
+                        <tr><th>Thời gian</th><th>Ảnh</th><th>Trạng thái</th><th>Hành động</th></tr>
+                    </thead>
+                    <tbody>
+                        {history.map((item) => (
+                            <tr key={item.id} onClick={() => setSelectedItem(item)} style={{cursor: 'pointer'}}>
+                                <td>{formatDate(item.uploadedAt || item.createdAt)}</td>
+                                <td><img src={item.imageUrl || item.url} style={{width: '40px', borderRadius: '4px'}} /></td>
+                                <td><span className={`badge ${item.status === 'Rejected' ? 'danger' : 'success'}`}>{item.status}</span></td>
+                                <td>
+                                    <button className="btn-sm" style={{background: '#fee2e2', color: '#dc2626', border: 'none'}} onClick={(e) => handleDelete(e, item.id)}>Xóa</button>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {history.map((item) => (
-                                <tr key={item.id} className="table-row">
-                                    <td>
-                                        <img src={item.imageUrl} alt="Eye" 
-                                            style={{width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0'}} 
-                                        />
-                                    </td>
-                                    <td>
-                                        <div style={{fontWeight: '600', color: '#334155'}}>
-                                            {new Date(item.uploadedAt).toLocaleDateString('vi-VN')}
-                                        </div>
-                                        <div style={{fontSize: '12px', color: '#94a3b8'}}>
-                                            {new Date(item.uploadedAt).toLocaleTimeString('vi-VN')}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span className={`result-badge ${item.status === 'Analyzed' ? 'low' : 'high'}`} 
-                                              style={{background: item.status === 'Pending' ? '#fff7ed' : undefined, color: item.status === 'Pending' ? '#c2410c' : undefined}}>
-                                            {item.status === 'Pending' ? 'Đang xử lý' : 'Hoàn tất'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        {item.aiAnalysisResultJson ? (
-                                            <div>
-                                                <span style={{fontWeight: 'bold', color: '#334155'}}>Đã có kết quả</span>
-                                            </div>
-                                        ) : (
-                                            <span style={{fontStyle: 'italic', color: '#94a3b8'}}>Chờ phân tích...</span>
-                                        )}
-                                    </td>
-                                    <td>
-                                        <button style={{
-                                            border: '1px solid #cbd5e1', background: 'white', 
-                                            padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#475569'
-                                        }}>
-                                            Xem chi tiết
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+                        ))}
+                    </tbody>
+                </table>
             </div>
+            {renderDetailModal()}
         </div>
     );
 };

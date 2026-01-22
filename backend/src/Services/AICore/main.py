@@ -1,107 +1,125 @@
-import torch
+import os
 import cv2
 import numpy as np
-import os
-from fastapi import FastAPI, File, UploadFile, HTTPException
+import requests
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from prometheus_fastapi_instrumentator import Instrumentator
 from strategies import AIServiceContext, ResNetStrategy
 
-app = FastAPI(title="HTGIACMAC AI Professional - GPU/CPU Verified")
+# --- CẤU HÌNH ĐƯỜNG DẪN TUYỆT ĐỐI ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = "/app/static"
+RESULT_DIR = os.path.join(STATIC_DIR, "results")
+UPLOAD_DIR = "/app/uploads" 
 
-# --- BƯỚC 1: KIỂM TRA PHẦN CỨNG KHI KHỞI ĐỘNG ---
-# Kiểm tra xem có card đồ họa Nvidia (CUDA) không
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "None"
-
-print("="*50)
-print(f"HỆ THỐNG AI ĐANG CHẠY TRÊN: {device.type.upper()}")
-print(f"CHI TIẾT THIẾT BỊ: {gpu_name}")
-print("="*50)
-
-# Cấu hình lưu trữ ảnh kết quả
-RESULT_DIR = "static/results"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- BƯỚC 2: LOGIC XÁC THỰC ẢNH MẮT ---
-def validate_eye_image(img_matrix):
-    if img_matrix is None:
-        return False, "Không thể đọc dữ liệu ảnh."
+app = FastAPI(title="AURA AI Core Service Pro")
+Instrumentator().instrument(app).expose(app)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+class ImagePayload(BaseModel):
+    file_name: str
+    image_url: str = ""
+
+def load_image_from_source(payload: ImagePayload):
+    if payload.image_url and payload.image_url.startswith("http"):
+        try:
+            print(f"--> [AI] Downloading from URL: {payload.image_url}")
+            resp = requests.get(payload.image_url, timeout=15)
+            if resp.status_code == 200:
+                arr = np.frombuffer(resp.content, np.uint8)
+                return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            print(f"--> [AI ERROR] Download failed: {e}")
+    local_path = os.path.join(UPLOAD_DIR, payload.file_name)
+    return cv2.imread(local_path) if os.path.exists(local_path) else None
+
+def check_retina_pro(img):
+    """
+    LOGIC TRUY QUÉT NÂNG CAO: Tọa độ X, Y, cấu hình hình học và mật độ mạch máu.
+    """
+    if img is None: return False, "Không đọc được dữ liệu ảnh", None, {}
     
-    # 1. KIỂM TRA MÀU SẮC CHI TIẾT (Võng mạc phải có màu Red/Orange trội)
-    # Chúng ta tính độ lệch màu giữa kênh Red và kênh Blue
-    avg_color = np.mean(img_matrix, axis=(0, 1))
-    red_dominance = avg_color[2] - avg_color[0] 
+    # Chuẩn hóa kích thước để phân tích logic
+    img_eval = cv2.resize(img, (512, 512))
+    gray = cv2.cvtColor(img_eval, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+
+    # 1. Tìm vòng tròn võng mạc (Hough Circle) - Xác định tâm X, Y
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1.2, 100, 
+                               param1=50, param2=35, minRadius=h//4, maxRadius=h//2)
     
-    # 2. KIỂM TRA CẤU TRÚC HÌNH TRÒN (Đặc điểm của nhãn cầu/ảnh soi đáy mắt)
-    gray = cv2.cvtColor(img_matrix, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-    # Tìm các vòng tròn có bán kính lớn
-    circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, 1, 200, 
-                               param1=50, param2=35, minRadius=50, maxRadius=1000)
+    cx, cy = 0, 0
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
+        cx, cy = int(circles[0, 0][0]), int(circles[0, 0][1])
+    else:
+        return False, "Không phát hiện cấu trúc cầu mắt (Ảnh mặt hoặc sai tiêu cự)", img_eval, {}
 
-    # ĐIỀU KIỆN NGHIÊM NGẶT: Phải có màu đỏ đặc trưng VÀ cấu trúc hình tròn
-    if red_dominance > 45 and circles is not None:
-        return True, "Xác thực ảnh mắt thành công."
+    # 2. Kiểm tra mật độ mạch máu (Vessel Density) để loại bỏ ảnh da mặt
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    contrast = clahe.apply(gray)
+    vessels = cv2.adaptiveThreshold(contrast, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    vessel_density = np.count_nonzero(vessels) / (h * w)
     
-    # Trả về lý do cụ thể để dễ debug trên Swagger
-    if red_dominance <= 45:
-        return False, f"Lỗi: Màu sắc không giống võng mạc (Red diff: {red_dominance:.1f})."
-        
-    return False, "Lỗi: Không tìm thấy cấu trúc hình tròn đặc trưng của mắt."
-# --- BƯỚC 3: CÁC ENDPOINT ---
+    if vessel_density < 0.01: 
+        return False, "Không chứa đặc điểm mạch máu võng mạc (Ảnh khuôn mặt/da)", img_eval, {"x": cx, "y": cy}
 
-@app.get("/ai-status")
-async def get_status():
-    """Kiểm tra xem hệ thống đang dùng GPU hay CPU thực tế"""
-    return {
-        "processor": device.type,
-        "gpu_model": gpu_name,
-        "is_cuda_ready": torch.cuda.is_available(),
-        "status": "Online"
-    }
+    # 3. Kiểm tra màu sắc (Sắc đỏ y tế)
+    avg_color = np.mean(img_eval, axis=(0, 1))
+    if not (avg_color[2] > avg_color[1] * 1.15): 
+        return False, "Sai màu sắc đặc trưng của mô võng mạc", img_eval, {"x": cx, "y": cy}
 
-@app.post("/api/v1/ai-core/validate-eye")
-async def validate_eye(file: UploadFile = File(...)):
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    is_valid, msg = validate_eye_image(img)
-    return {"is_valid": is_valid, "message": msg, "checked_by": device.type}
+    return True, "Hợp lệ", img_eval, {"x": cx, "y": cy, "vessel_score": round(vessel_density, 4)}
 
-@app.post("/api/v1/ai-core/auto-diagnosis")
-async def auto_diagnosis(file: UploadFile = File(...)):
+@app.get("/")
+def read_root():
+    return {"status": "Online", "mode": "Strict Validation Enabled"}
+
+@app.post("/api/ai/auto-diagnosis")
+def auto_diagnosis(payload: ImagePayload):
     try:
-        contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        img = load_image_from_source(payload)
+        if img is None: return {"status": "Failed", "error": "AI could not load image"}
 
-        # Kiểm tra trước khi chẩn đoán
-        valid, _ = validate_eye_image(img)
-        if not valid: 
-            raise HTTPException(status_code=422, detail="Ảnh không hợp lệ")
+        # THỰC THI TRUY QUÉT PRO
+        is_valid, msg, img_matrix, meta = check_retina_pro(img)
+        
+        if not is_valid:
+            return {
+                "status": "Rejected", 
+                "diagnosis": msg, 
+                "risk_score": 0, 
+                "risk_level": "Invalid", 
+                "heatmap_url": "",
+                "metadata": meta
+            }
 
-        # Chạy phân tích AI
+        # CHẠY MODEL CHẨN ĐOÁN (Strategy Pattern)
         context = AIServiceContext(ResNetStrategy())
-        result = context.execute_analysis(img)
+        result = context.execute_analysis(img_matrix)
+        risk_score = result.get('risk_percentage', 0)
+        risk_level = result.get('risk_level')
+        
+        if not risk_level or risk_level in ["Unknown", "N/A"]:
+            if risk_score >= 80: risk_level = "High"
+            elif risk_score >= 40: risk_level = "Medium"
+            else: risk_level = "Low"
 
-        # Lưu ảnh Heatmap
-        output_filename = f"heatmap_{file.filename}"
-        output_path = os.path.join(RESULT_DIR, output_filename)
-        cv2.imwrite(output_path, result['visualized_overlay'])
+        output_filename = f"heatmap_{payload.file_name}"
+        cv2.imwrite(os.path.join(RESULT_DIR, output_filename), result['visualized_overlay'])
 
         return {
-            "status": "Phân tích hoàn tất",
-            "metadata": {
-                "hardware_acceleration": device.type,
-                "gpu_info": gpu_name
-            },
-            "diagnosis_report": {
-                "risk_score": result['risk_percentage'],
-                "diagnosis": result['diagnosis'],
-                "heatmap_url": f"http://localhost:8000/static/results/{output_filename}",
-                "coordinates": result['coordinates'][:5]
-            }
+            "status": "Success",
+            "diagnosis": result['diagnosis'],
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "heatmap_url": f"http://localhost:5006/static/results/{output_filename}",
+            "metadata": meta
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

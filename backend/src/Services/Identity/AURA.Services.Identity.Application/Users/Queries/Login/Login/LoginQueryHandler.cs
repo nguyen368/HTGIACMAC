@@ -37,7 +37,14 @@ public class LoginQueryHandler : IQueryHandler<LoginQuery, Result<LoginResponse>
             return Result<LoginResponse>.Failure("Email hoặc mật khẩu không chính xác.");
         }
 
-        // 3. Tạo JWT Token chứa thông tin User và Role (RBAC)
+        // --- CODE MỚI: KIỂM TRA TRẠNG THÁI KÍCH HOẠT ---
+        // Nếu tài khoản bị vô hiệu hóa (IsActive = false), từ chối đăng nhập
+        if (!user.IsActive)
+        {
+            return Result<LoginResponse>.Failure("Tài khoản của bạn đang chờ quản trị viên hệ thống xác minh và phê duyệt.");
+        }
+
+        // 3. Tạo JWT Token chứa thông tin User và Role (Lúc này Token đã có ClinicId như bạn vừa sửa)
         var token = _jwtTokenService.GenerateToken(user);
 
         // 4. Trả về thông tin đăng nhập thành công

@@ -1,6 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import imagingApi from '../../../../api/imagingApi'; // Import API để lấy kết quả mới nhất
 
 const PatientHome = ({ user, setTab }) => {
+    // --- [CODE MỚI] Logic lấy kết quả khám gần nhất ---
+    const [lastExam, setLastExam] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (user) {
+            const patientId = user.id || user.userId;
+            imagingApi.getImagesByPatient(patientId)
+                .then(data => {
+                    const list = Array.isArray(data) ? data : (data.data || []);
+                    if (list.length > 0) {
+                        // Sắp xếp giảm dần để lấy cái mới nhất
+                        const sorted = list.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+                        setLastExam(sorted[0]);
+                    }
+                })
+                .catch(err => console.error(err))
+                .finally(() => setLoading(false));
+        }
+    }, [user]);
+    // ------------------------------------------------
+
     return (
         <div className="dashboard-home">
             {/* Banner Chào Mừng */}
@@ -11,7 +34,6 @@ const PatientHome = ({ user, setTab }) => {
                         Hệ thống AURA MED sử dụng trí tuệ nhân tạo để hỗ trợ sàng lọc sớm các bệnh lý đáy mắt.
                         Vui lòng cập nhật hồ sơ đầy đủ trước khi thực hiện chẩn đoán.
                     </p>
-                    {/* Thêm nút tắt để chuyển nhanh sang Upload */}
                     {setTab && (
                         <button 
                             className="btn-save" 
@@ -25,7 +47,32 @@ const PatientHome = ({ user, setTab }) => {
                 <i className="fas fa-user-md welcome-decor"></i>
             </div>
 
-            {/* Grid Thông Tin Tham Khảo (Kiến thức thật) */}
+            {/* --- [CODE MỚI] Hiển thị kết quả gần nhất (Dynamic Dashboard) --- */}
+            {lastExam && (
+                <div style={{marginBottom: '30px'}}>
+                    <h3 style={{marginBottom: '15px', color: 'var(--primary-700)'}}>Kết quả sàng lọc gần nhất</h3>
+                    <div className="pro-card" style={{display: 'flex', alignItems: 'center', gap: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0'}}>
+                        <div style={{width: '60px', height: '60px', background: 'white', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                            <i className="fas fa-notes-medical" style={{fontSize: '28px', color: '#16a34a'}}></i>
+                        </div>
+                        <div style={{flex: 1}}>
+                            <h4 style={{margin: '0 0 5px 0', color: '#15803d'}}>Đã hoàn thành chẩn đoán</h4>
+                            <p style={{margin: 0, fontSize: '14px', color: '#166534'}}>
+                                Thời gian: <strong>{new Date(lastExam.uploadedAt).toLocaleString('vi-VN')}</strong> <br/>
+                                Kết quả sơ bộ: <strong>{lastExam.aiDiagnosis?.diagnosis || "Đang xử lý"}</strong>
+                            </p>
+                        </div>
+                        {setTab && (
+                            <button className="btn-sm" style={{background: 'white', border: '1px solid #16a34a', color: '#16a34a'}} onClick={() => setTab('history')}>
+                                Xem chi tiết
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+            {/* ----------------------------------------------------------- */}
+
+            {/* Grid Thông Tin Tham Khảo */}
             <h3 style={{marginBottom: '20px', color: 'var(--primary-700)'}}>Thông tin y khoa tham khảo</h3>
             
             <div className="input-grid">
@@ -91,7 +138,7 @@ const PatientHome = ({ user, setTab }) => {
                     <div className="form-body" style={{display: 'flex', gap: '20px', flexWrap: 'wrap'}}>
                         <div style={{flex: 1, minWidth: '250px', background: '#f1f5f9', padding: '16px', borderRadius: '12px'}}>
                             <h4 style={{marginBottom: '8px', color: '#334155'}}>Kiểm soát đường huyết</h4>
-                            {/* ĐÃ SỬA LỖI TẠI DÒNG DƯỚI ĐÂY: thay < 7% bằng &lt; 7% */}
+                            {/* ĐÃ SỬA LỖI CÚ PHÁP JSX: < 7% -> &lt; 7% */}
                             <p style={{fontSize: '13px', color: '#64748b'}}>
                                 Giữ chỉ số HbA1c ở mức an toàn (&lt; 7%) để giảm nguy cơ biến chứng võng mạc.
                             </p>

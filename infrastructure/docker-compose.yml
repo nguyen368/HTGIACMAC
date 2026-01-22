@@ -9,7 +9,7 @@ services:
       - POSTGRES_PASSWORD=zxc123456
       - POSTGRES_DB=aura_identity_db
     ports:
-      - "5435:5432" # Map ra ngoài để debug local
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -51,52 +51,41 @@ services:
   # 4. IMAGING SERVICE
   imaging-service:
     container_name: imaging-service
+    restart: always
     build:
       context: ../
       dockerfile: backend/src/Services/Imaging/AURA.Services.Imaging.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_imaging_db;Username=admin;Password=zxc123456
+      - RabbitMQ__Host=rabbitmq
     ports:
       - "5003:8080"
+    volumes:
+      - ./uploads_data:/app/uploads
     depends_on:
       - aura.db
+      - rabbitmq
     networks:
       - aura-network
 
-  # 5. BILLING SERVICE
-  billing-service:
-    container_name: billing-service
+  # 7. AI CORE SERVICE (ĐÃ FIX VOLUME)
+  ai-core-service:
+    container_name: ai-core-service
+    restart: always
     build:
-      context: ../
-      dockerfile: backend/src/Services/Billing/AURA.Services.Billing.API/Dockerfile
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_billing_db;Username=admin;Password=zxc123456
+      context: ../backend/src/Services/AICore
+      dockerfile: Dockerfile 
     ports:
-      - "5004:8080"
-    depends_on:
-      - aura.db
+      - "5006:8000"
+    volumes:
+      - ./uploads_data:/app/uploads
+      # [QUAN TRỌNG] Map thư mục static của AI ra ngoài máy thật để Frontend thấy ảnh Heatmap
+      - ./ai_static:/app/static/results
     networks:
       - aura-network
 
-  # 6. NOTIFICATION SERVICE
-  notification-service:
-    container_name: notification-service
-    build:
-      context: ../
-      dockerfile: backend/src/Services/Notification/AURA.Services.Notification.API/Dockerfile
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - RabbitMQ__Host=rabbitmq  # Cấu hình host
-    ports:
-      - "5005:8080"
-    depends_on:
-      - rabbitmq  # <-- Thêm dòng này
-    networks:
-      - aura-network
-
-  # 7. API GATEWAY
+  # 8. API GATEWAY (NGINX)
   gateway:
     image: nginx:latest
     container_name: aura-gateway
@@ -108,17 +97,16 @@ services:
       - identity-service
       - medical-record-service
       - imaging-service
-      - billing-service
     networks:
       - aura-network
 
-  #RabbitMQ
+  # 9. RabbitMQ
   rabbitmq:
     image: masstransit/rabbitmq:latest
     container_name: aura-rabbitmq
     ports:
-      - "5672:5672"   # Port để code kết nối
-      - "15672:15672" # Port trang quản trị web
+      - "5672:5672"
+      - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
