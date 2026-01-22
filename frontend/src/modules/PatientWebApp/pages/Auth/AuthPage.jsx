@@ -1,9 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; 
+// import jwtDecode from "jwt-decode";  <-- ĐÃ XÓA DÒNG NÀY ĐỂ KHỎI BỊ LỖI
 import authApi from '../../../../api/authApi';
 import './AuthPage.css';
 import { useAuth } from '../../../../context/AuthContext';
+
+// --- HÀM GIẢI MÃ TOKEN THỦ CÔNG (KHÔNG CẦN THƯ VIỆN) ---
+const parseJwt = (token) => {
+    try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        return null;
+    }
+};
 
 const AuthPage = () => {
     const navigate = useNavigate();
@@ -93,10 +107,11 @@ const AuthPage = () => {
                 // 2. Cập nhật Context (Lưu user vào database trình duyệt)
                 if (login) await login(data);
 
-                // 3. GIẢI MÃ TOKEN & ĐIỀU HƯỚNG (Giữ logic role của bạn)
+                // 3. GIẢI MÃ TOKEN & ĐIỀU HƯỚNG
                 let userRole = '';
                 try {
                     const decoded = jwtDecode(data.token);
+                    // Lấy Role: Ưu tiên key ngắn, dự phòng key dài của Microsoft
                     userRole = decoded.role || 
                                decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
                                'patient'; 
@@ -110,12 +125,13 @@ const AuthPage = () => {
 
                 // 4. ĐIỀU HƯỚNG CHÍNH XÁC
                 if (role === 'admin' || role === 'administrator') {
-                    navigate('/admin');
+                    navigate('/admin/dashboard'); // Sửa lại đường dẫn cho đúng routing
                 } 
                 else if (role === 'doctor') {
-                    navigate('/doctor'); 
+                    navigate('/clinic/dashboard'); // Sửa lại đường dẫn cho đúng routing
                 }
                 else {
+                    // Mặc định là Patient
                     navigate('/patient/dashboard'); 
                 } 
             }
@@ -127,6 +143,7 @@ const AuthPage = () => {
         }
     };
 
+    // 4. Xử lý Đăng ký (Sửa Logic gửi Role Admin)
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
         const { fullName, email, password, confirmPassword, terms } = regData;
@@ -146,6 +163,11 @@ const AuthPage = () => {
 
         setIsLoading(true);
         try {
+            // [SỬA ĐỔI] Mapping Role Backend
+            let roleToSend = 'Patient';
+            if (accountType === 'Doctor') roleToSend = 'Doctor';
+            if (accountType === 'Admin') roleToSend = 'Admin'; // Gửi role Admin thay vì Clinic
+
             await authApi.register({
                 username: email, 
                 email: email,
@@ -181,7 +203,7 @@ const AuthPage = () => {
                 {/* Main Content */}
                 <div className="auth-main-content">
                     <div className="auth-card-container">
-                        {/* Welcome Section - Giữ nguyên list tính năng */}
+                        {/* Welcome Section (Left) - GIỮ NGUYÊN */}
                         <div className="welcome-section">
                             <h2>Phát hiện sớm nguy cơ bệnh lý qua hình ảnh võng mạc</h2>
                             <p>Hệ thống AURA sử dụng AI để phân tích mạch máu võng mạc, hỗ trợ bác sĩ trong việc phát hiện sớm các nguy cơ tim mạch, tiểu đường và đột quỵ.</p>
@@ -235,7 +257,32 @@ const AuthPage = () => {
 
                             {activeTab === 'register' && (
                                 <form className="auth-form" onSubmit={handleRegisterSubmit}>
-                                    <h3 className="auth-form-title">Tạo tài khoản bệnh nhân</h3>
+                                    <h3 className="auth-form-title">Tạo tài khoản mới</h3>
+                                    
+                                    <div className="form-group">
+                                        <label>Loại tài khoản</label>
+                                        <div className="account-type">
+                                            <input 
+                                                type="radio" id="patient" name="account-type" value="Patient"
+                                                checked={regData.accountType === 'Patient'} onChange={handleRegChange}
+                                            />
+                                            <label htmlFor="patient">Bệnh nhân</label>
+                                            
+                                            <input 
+                                                type="radio" id="doctor" name="account-type" value="Doctor"
+                                                checked={regData.accountType === 'Doctor'} onChange={handleRegChange}
+                                            />
+                                            <label htmlFor="doctor">Bác sĩ</label>
+                                            
+                                            {/* [SỬA ĐỔI] Thay Clinic thành Admin */}
+                                            <input 
+                                                type="radio" id="admin" name="account-type" value="Admin"
+                                                checked={regData.accountType === 'Admin'} onChange={handleRegChange}
+                                            />
+                                            <label htmlFor="admin">Admin</label>
+                                        </div>
+                                    </div>
+                                    
                                     <div className="form-group">
                                         <label>Họ và tên</label>
                                         <div className="input-with-icon">
@@ -266,6 +313,8 @@ const AuthPage = () => {
                                                 <i className={`fas ${showRegPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                                             </button>
                                         </div>
+                                        
+                                        {/* Password Requirements Checklist - GIỮ NGUYÊN */}
                                         <div className="password-requirements">
                                             <div className={`requirement ${passwordCriteria.length ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.length ? 'fa-check-circle' : 'fa-circle'}`}></i> Tối thiểu 8 ký tự</div>
                                             <div className={`requirement ${passwordCriteria.case ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.case ? 'fa-check-circle' : 'fa-circle'}`}></i> Chứa chữ hoa và chữ thường</div>
@@ -297,6 +346,7 @@ const AuthPage = () => {
                 </div>
             </div>
 
+            {/* Forgot Password Modal - GIỮ NGUYÊN */}
             {showForgotPassword && (
                 <div className="auth-modal">
                     <div className="auth-modal-content">

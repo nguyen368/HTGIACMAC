@@ -1,5 +1,5 @@
 services:
-  # 1. DATABASE CHUNG
+  # 1. DATABASE
   aura.db:
     image: postgres:15-alpine
     container_name: aura.db
@@ -58,7 +58,6 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_imaging_db;Username=admin;Password=zxc123456
-      - RabbitMQ__Host=rabbitmq
     ports:
       - "5003:8080"
     volumes:
@@ -69,7 +68,34 @@ services:
     networks:
       - aura-network
 
-  # 7. AI CORE SERVICE (ĐÃ FIX VOLUME)
+  # 5. BILLING SERVICE 
+  billing-service:
+    container_name: billing-service
+    build:
+      context: ../
+      dockerfile: backend/src/Services/Billing/AURA.Services.Billing.API/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    networks:
+      - aura-network
+
+  # 6. NOTIFICATION SERVICE
+  notification-service:
+    container_name: notification-service
+    build:
+      context: ../
+      dockerfile: backend/src/Services/Notification/AURA.Services.Notification.API/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq
+    ports:
+      - "5005:8080"
+    depends_on:
+      - rabbitmq
+    networks:
+      - aura-network
+
+  # 7. AI CORE SERVICE
   ai-core-service:
     container_name: ai-core-service
     restart: always
@@ -80,12 +106,11 @@ services:
       - "5006:8000"
     volumes:
       - ./uploads_data:/app/uploads
-      # [QUAN TRỌNG] Map thư mục static của AI ra ngoài máy thật để Frontend thấy ảnh Heatmap
       - ./ai_static:/app/static/results
     networks:
       - aura-network
 
-  # 8. API GATEWAY (NGINX)
+  # 8. API GATEWAY
   gateway:
     image: nginx:latest
     container_name: aura-gateway
@@ -97,13 +122,15 @@ services:
       - identity-service
       - medical-record-service
       - imaging-service
+      - billing-service
     networks:
       - aura-network
 
-  # 9. RabbitMQ
+  # 9. RabbitMQ 
   rabbitmq:
-    image: masstransit/rabbitmq:latest
+    image: rabbitmq:3-management
     container_name: aura-rabbitmq
+    restart: always
     ports:
       - "5672:5672"
       - "15672:15672"
