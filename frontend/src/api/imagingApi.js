@@ -1,31 +1,15 @@
-import axios from "axios";
-
-const imagingClient = axios.create({
-  baseURL: "http://localhost:5003/api", 
-});
-
-imagingClient.interceptors.request.use(async (config) => {
-    const token = localStorage.getItem('aura_token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-imagingClient.interceptors.response.use(
-  (response) => response.data,
-  (error) => { throw error; }
-);
+import axiosClient from "./axiosClient";
 
 const imagingApi = {
   // Lấy danh sách ảnh theo ID bệnh nhân
   getImagesByPatient: (patientId) => {
-    return imagingClient.get(`/imaging/patient/${patientId}`);
+    // SỬA: Đổi images -> imaging để khớp với Controller Backend
+    return axiosClient.get(`/imaging/patient/${patientId}`);
   },
   
   // Xóa ảnh theo ID
   deleteImage: (imageId) => {
-    return imagingClient.delete(`/imaging/${imageId}`);
+    return axiosClient.delete(`/imaging/${imageId}`);
   },
 
   // Tải ảnh đơn lẻ
@@ -34,7 +18,10 @@ const imagingApi = {
     formData.append("File", file); 
     formData.append("ClinicId", clinicId);
     formData.append("PatientId", patientId); 
-    return imagingClient.post("/imaging/upload", formData);
+    
+    return axiosClient.post("/imaging/upload", formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    });
   }
 };
 

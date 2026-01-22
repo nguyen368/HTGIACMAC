@@ -1,14 +1,21 @@
-import axiosClient from "./axiosClient";
+import axiosClient from './axiosClient';
 
 const authApi = {
-    login(data) {
-        return axiosClient.post('/auth/login', data);
+    login: (data) => {
+        const url = '/auth/login';
+        return axiosClient.post(url, data);
     },
-    register(data) {
-        return axiosClient.post('/auth/register', data);
+    register: (data) => {
+        const url = '/auth/register';
+        return axiosClient.post(url, data);
     },
-    getAllPatients() {
-        return axiosClient.get('/auth/patients');
+    
+    // --- THÊM HÀM NÀY ĐỂ GỌI BACKEND ---
+    googleLogin: (googleToken) => {
+        // Đây là API mà Backend của bạn PHẢI CÓ
+        const url = '/auth/google-login'; 
+        // Gửi token sang backend dưới dạng JSON
+        return axiosClient.post(url, { token: googleToken }); 
     }
 };
 

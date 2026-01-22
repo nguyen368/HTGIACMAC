@@ -1,51 +1,28 @@
-import axios from "axios";
+// frontend/src/api/medicalApi.js
+import axiosClient from "./axiosClient";
 
-// 1. Tạo instance axios trỏ đến Port 5002 (Medical Service)
-const medicalClient = axios.create({
-  baseURL: "http://localhost:5002/api", 
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// 2. [QUAN TRỌNG] Interceptor: Tự động gắn Token vào Header trước khi gửi
-// Nếu thiếu đoạn này => Server sẽ trả về 401 Unauthorized
-medicalClient.interceptors.request.use(async (config) => {
-    const token = localStorage.getItem('aura_token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-// 3. Xử lý phản hồi gọn gàng (Trả về data luôn, bỏ qua wrapper của axios)
-medicalClient.interceptors.response.use(
-  (response) => response.data,
-  (error) => { throw error; }
-);
-
-// 4. Khai báo các hàm gọi API
 const medicalApi = {
   // Lấy danh sách tất cả bệnh nhân
   getAllPatients: () => {
-    return medicalClient.get("/patients");
+    return axiosClient.get("/patients"); 
+    // -> /api/patients (Gateway sẽ chuyển sang Medical Service)
   },
   
   // Lấy chi tiết 1 bệnh nhân
   getPatientById: (id) => {
-    return medicalClient.get(`/patients/${id}`);
+    return axiosClient.get(`/patients/${id}`);
   },
 
   // Cập nhật hồ sơ cá nhân
   updateProfile: (data) => {
-    return medicalClient.put("/patients/me", data);
+    return axiosClient.put("/patients/me", data);
   },
 
-  // [MỚI] Hàm lưu kết quả khám (Examinations)
-  // Route này khớp với [Route("api/medical-records/examinations")] trong Controller Backend
+  // Lưu kết quả khám
   saveExamination: (data) => {
-    // data gồm: { patientId, imageId, diagnosis, doctorNotes, doctorId }
-    return medicalClient.post("/medical-records/examinations", data);
+    // Lưu ý: Đường dẫn này phải khớp với Nginx location
+    // Nếu Nginx cấu hình /api/examinations/ -> thì ở đây gọi /examinations
+    return axiosClient.post("/examinations", data);
   }
 };
 

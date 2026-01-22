@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-// Địa chỉ của Billing Service (Backend)
-const API_URL = 'http://localhost:5004/api/Bills';
+// ĐÃ SỬA: Trỏ về Gateway (cổng 80 mặc định) thay vì cổng 5004
+// Nginx sẽ tự động chuyển tiếp request này đến Billing Service
+const API_URL = 'http://localhost/api/bills';
 
 export const getBills = async () => {
     try {
