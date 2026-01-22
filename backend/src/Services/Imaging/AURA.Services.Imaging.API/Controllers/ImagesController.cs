@@ -7,11 +7,11 @@ using Microsoft.EntityFrameworkCore;
 using System.IO.Compression;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json; 
-using MassTransit; // THÊM THƯ VIỆN NÀY
+using MassTransit;
 
 namespace AURA.Services.Imaging.API.Controllers;
 
-// Định nghĩa cấu trúc tin nhắn để RabbitMQ hiểu
+// Định nghĩa cấu trúc tin nhắn RabbitMQ
 public record ImageUploadedEvent(Guid ImageId, string ImageUrl, Guid PatientId, Guid ClinicId);
 
 [ApiController]
@@ -21,14 +21,14 @@ public class ImagesController : ControllerBase
     private readonly IImageUploader _uploader;
     private readonly ImagingDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IPublishEndpoint _publishEndpoint; // THÊM IPublishEndpoint
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public ImagesController(IImageUploader uploader, ImagingDbContext context, IHttpClientFactory httpClientFactory, IPublishEndpoint publishEndpoint)
     {
         _uploader = uploader;
         _context = context;
         _httpClientFactory = httpClientFactory;
-        _publishEndpoint = publishEndpoint; // Gán vào biến
+        _publishEndpoint = publishEndpoint;
     }
 
     private class AiDiagnosisResponse {
@@ -40,13 +40,32 @@ public class ImagesController : ControllerBase
         [JsonPropertyName("metadata")] public object? Metadata { get; set; } 
     }
 
+    // --- HÀM GỌI AI ĐÃ SỬA ---
     private async Task<AiDiagnosisResponse?> CallAiDiagnosis(string fileName, string imageUrl) {
         try {
             var client = _httpClientFactory.CreateClient();
-            string aiUrl = "http://localhost:5006/api/ai/auto-diagnosis"; 
+            
+            // [QUAN TRỌNG] Sửa localhost:5006 -> ai-core-service:8000
+            // Trong Docker, các service gọi nhau bằng TÊN CONTAINER và PORT NỘI BỘ (8000)
+            string aiUrl = "http://ai-core-service:8000/api/ai/auto-diagnosis"; 
+            
+            Console.WriteLine($"[INFO] Calling AI Core at: {aiUrl}"); // Log ra để dễ debug
+
             var response = await client.PostAsJsonAsync(aiUrl, new { file_name = fileName, image_url = imageUrl });
-            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<AiDiagnosisResponse>() : null;
-        } catch { return null; }
+            
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<AiDiagnosisResponse>();
+            }
+            else
+            {
+                Console.WriteLine($"[ERROR] AI Core returned: {response.StatusCode}");
+                return null;
+            }
+        } catch (Exception ex) { 
+            Console.WriteLine($"[EXCEPTION] Connect AI Core failed: {ex.Message}");
+            return null; 
+        }
     }
 
     [HttpPost("upload")]
@@ -54,23 +73,30 @@ public class ImagesController : ControllerBase
     {
         if (request.File == null || request.File.Length == 0) return BadRequest("File rỗng");
         try {
+            // 1. Upload ảnh lên Cloud/Local
             var result = await _uploader.UploadAsync(request.File);
+            
+            // 2. Lưu Metadata vào DB
             var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
             _context.Images.Add(image);
             await _context.SaveChangesAsync();
 
-            // 1. Vẫn giữ logic gọi AI trực tiếp nếu bạn muốn (Code cũ)
+            // 3. Gọi AI Core phân tích (Code cũ)
             var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
             
-            // 2. NHƯNG THÊM DÒNG NÀY ĐỂ RABBITMQ NHẢY SỐ (Xử lý bất đồng bộ)
+            // 4. Gửi Event sang RabbitMQ (để Notification Service báo về Frontend)
             await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, result.Url, request.PatientId, request.ClinicId));
 
             string finalStatus = (aiResult != null && aiResult.Status == "Rejected") ? "Rejected" : "Success";
 
             return Ok(new { 
-                Message = finalStatus == "Rejected" ? "Ảnh bị từ chối" : "Upload thành công và đã gửi tin nhắn xử lý", 
+                Message = finalStatus == "Rejected" ? "Ảnh bị từ chối" : "Upload thành công", 
                 Details = new[] { new { 
-                    FileName = request.File.FileName, Status = finalStatus, Url = result.Url, Id = image.Id, AiDiagnosis = aiResult 
+                    FileName = request.File.FileName, 
+                    Status = finalStatus, 
+                    Url = result.Url, 
+                    Id = image.Id, 
+                    AiDiagnosis = aiResult 
                 }}
             });
         } catch (Exception ex) { return StatusCode(500, ex.Message); }
@@ -101,9 +127,9 @@ public class ImagesController : ControllerBase
                         if (!string.IsNullOrEmpty(uploadRes.Url)) {
                             var image = new ImageMetadata(patientId, clinicId, uploadRes.Url, uploadRes.PublicId);
                             _context.Images.Add(image);
-                            await _context.SaveChangesAsync(); // Lưu để lấy ID
+                            await _context.SaveChangesAsync();
                             
-                            // BẮN TIN NHẮN CHO TỪNG ẢNH TRONG LÔ (Batch Processing)
+                            // Bắn tin nhắn RabbitMQ
                             await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, uploadRes.Url, patientId, clinicId));
 
                             results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadRes.Url }); 
@@ -113,7 +139,7 @@ public class ImagesController : ControllerBase
                 } catch { }
             }
         }
-        return Ok(new { Message = $"Hoàn tất: {successCount} ảnh đã được đưa vào hàng chờ RabbitMQ", Details = results });
+        return Ok(new { Message = $"Hoàn tất: {successCount} ảnh đã được xử lý", Details = results });
     }
 
     [HttpGet("stats/{clinicId}")]
@@ -130,4 +156,21 @@ public class ImagesController : ControllerBase
             .Select(i => new { i.Id, i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm"), FileName = "Ảnh đáy mắt" }).ToListAsync();
         return Ok(images);
     }
+    // ... code cũ ...
+
+    [HttpDelete("{imageId}")]
+    public async Task<IActionResult> DeleteImage(Guid imageId)
+    {
+        var image = await _context.Images.FindAsync(imageId);
+        if (image == null) return NotFound("Không tìm thấy ảnh.");
+
+        // Xóa file trên Cloudinary/Local thông qua interface uploader (nếu cần)
+        // await _uploader.DeleteAsync(image.PublicId); 
+
+        _context.Images.Remove(image);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Đã xóa ảnh thành công." });
+    }
+    
 }

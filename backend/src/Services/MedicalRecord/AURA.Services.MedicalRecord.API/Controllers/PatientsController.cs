@@ -27,7 +27,7 @@ public class PatientsController : ControllerBase
     // 1. QUẢN LÝ HỒ SƠ CÁ NHÂN (PROFILE)
     // =================================================================================
 
-    // [POST] api/patients -> Tạo hồ sơ lần đầu
+    // [POST] api/patients -> Tạo hồ sơ lần đầu (Dành cho form đăng ký thủ công nếu cần)
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] UpdatePatientProfileRequest request)
     {
@@ -60,7 +60,7 @@ public class PatientsController : ControllerBase
         return Ok(patient);
     }
 
-    // [GET] api/patients/me -> Xem hồ sơ của chính mình
+    // [GET] api/patients/me -> Xem hồ sơ của chính mình (ĐÃ SỬA: AUTO-CREATE NẾU CHƯA CÓ)
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
@@ -70,16 +70,37 @@ public class PatientsController : ControllerBase
         // Include MedicalHistories để xem luôn tiền sử bệnh
         var patient = await _context.Patients
             .Include(p => p.MedicalHistories) 
-            .AsNoTracking() // Tối ưu đọc
-            .FirstOrDefaultAsync(p => p.UserId == userId);
+            .FirstOrDefaultAsync(p => p.UserId == userId); // Bỏ AsNoTracking để lát nữa còn Add được nếu cần
 
-        // Nếu chưa có hồ sơ, trả về 404 hoặc null tùy logic FE, ở đây return NotFound để FE biết redirect
-        if (patient == null) return NotFound("Chưa cập nhật hồ sơ y tế.");
+        // [FIX QUAN TRỌNG]: Tự động tạo hồ sơ nếu chưa có (Flow Login Google)
+        if (patient == null) 
+        {
+            // Lấy thông tin sơ bộ từ Token (Email, Name) để tạo hồ sơ tạm
+            var email = User.FindFirst(ClaimTypes.Email)?.Value ?? "";
+            var name = User.FindFirst(ClaimTypes.Name)?.Value ?? User.FindFirst("name")?.Value ?? "Người dùng mới";
+            
+            // Tạo đối tượng Patient mới (Giả sử Constructor của bạn hỗ trợ, nếu không thì dùng object initializer)
+            // Lưu ý: Các trường chưa biết thì để trống hoặc giá trị mặc định
+            patient = new Patient(
+                userId, 
+                name, 
+                DateTime.UtcNow, // DOB tạm
+                "Other",         // Gender tạm
+                "",              // Phone tạm
+                ""               // Address tạm
+            );
+
+            // Nếu Entity Patient của bạn có trường Email riêng thì gán vào (tùy cấu trúc Domain của bạn)
+            // patient.Email = email; 
+
+            _context.Patients.Add(patient);
+            await _context.SaveChangesAsync();
+        }
 
         return Ok(patient);
     }
 
-    // [PUT] api/patients/me -> Cập nhật thông tin (Đã giữ logic UPSERT của bạn)
+    // [PUT] api/patients/me -> Cập nhật thông tin (Logic UPSERT giữ nguyên)
     [HttpPut("me")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdatePatientProfileRequest request)
     {
@@ -99,7 +120,7 @@ public class PatientsController : ControllerBase
         // Chuẩn hóa ngày sinh sang UTC
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
 
-        // 3. Logic UPSERT (Update or Insert) - FIX QUAN TRỌNG
+        // 3. Logic UPSERT (Update or Insert)
         if (patient == null) 
         {
             // TRƯỜNG HỢP 1: Chưa có hồ sơ -> TẠO MỚI LUÔN
@@ -161,9 +182,13 @@ public class PatientsController : ControllerBase
     private Guid GetUserIdFromToken()
     {
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        // Fallback các claim khác nếu NameIdentifier null (Thường gặp với Google Token)
         if (string.IsNullOrEmpty(userIdString))
         {
-            userIdString = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
+            userIdString = User.FindFirst("sub")?.Value 
+                        ?? User.FindFirst("id")?.Value
+                        ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
         }
 
         if (Guid.TryParse(userIdString, out var userId))
