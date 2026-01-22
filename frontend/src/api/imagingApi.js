@@ -1,6 +1,5 @@
 import axios from "axios";
 
-// Tạo instance riêng gọi thẳng vào Port 5003 (Imaging Service)
 const imagingClient = axios.create({
   baseURL: "http://localhost:5003/api", 
 });
@@ -14,45 +13,28 @@ imagingClient.interceptors.request.use(async (config) => {
 });
 
 imagingClient.interceptors.response.use(
-  (response) => {
-    if (response && response.data) return response.data;
-    return response;
-  },
+  (response) => response.data,
   (error) => { throw error; }
 );
 
 const imagingApi = {
+  // Lấy danh sách ảnh theo ID bệnh nhân
+  getImagesByPatient: (patientId) => {
+    return imagingClient.get(`/imaging/patient/${patientId}`);
+  },
+  
+  // Xóa ảnh theo ID
+  deleteImage: (imageId) => {
+    return imagingClient.delete(`/imaging/${imageId}`);
+  },
+
+  // Tải ảnh đơn lẻ
   uploadSingle: (file, clinicId, patientId) => {
     const formData = new FormData();
     formData.append("File", file); 
     formData.append("ClinicId", clinicId);
     formData.append("PatientId", patientId); 
     return imagingClient.post("/imaging/upload", formData);
-  },
-
-  batchUpload: (file, clinicId, patientId) => {
-      const formData = new FormData();
-      formData.append("zipFile", file);
-      formData.append("clinicId", clinicId);
-      formData.append("patientId", patientId);
-      return imagingClient.post("/imaging/batch-upload", formData);
-  },
-
-  getImagesByPatient: (patientId) => {
-    return imagingClient.get(`/imaging/patient/${patientId}`);
-  },
-  
-  // [MỚI] Lấy chi tiết ảnh
-  getDetail: (imageId) => {
-    return imagingClient.get(`/imaging/${imageId}`);
-  },
-
-  getStats: (clinicId) => {
-      return imagingClient.get(`/imaging/stats/${clinicId}`);
-  },
-  
-  deleteImage: (imageId) => {
-    return imagingClient.delete(`/imaging/${imageId}`);
   }
 };
 

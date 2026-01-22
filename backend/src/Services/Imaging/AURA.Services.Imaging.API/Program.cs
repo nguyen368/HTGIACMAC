@@ -1,49 +1,27 @@
 using AURA.Services.Imaging.Application.Interfaces;
 using AURA.Services.Imaging.Infrastructure.Data;
 using AURA.Services.Imaging.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+// --- CÁC THƯ VIỆN CẦN THIẾT (PHẢI CÓ) ---
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using MassTransit;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Đăng ký Database (PostgreSQL)
+// =========================================================================
+// 1. ĐĂNG KÝ CÁC DỊCH VỤ (SERVICES)
+// =========================================================================
+
+// A. Database (PostgreSQL)
 builder.Services.AddDbContext<ImagingDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. Đăng ký HttpClient (Để gọi sang service AI Core Python)
+// B. HttpClient & CORS
 builder.Services.AddHttpClient();
-
-// 3. Cấu hình Authentication (JWT) - MỚI THÊM
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? "Key_Mac_Dinh_Du_Phong_Cho_Dev_Moi_123456789";
-var key = Encoding.UTF8.GetBytes(secretKey);
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ClockSkew = TimeSpan.Zero
-    };
-});
-
-// 4. Cấu hình CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
@@ -55,73 +33,81 @@ builder.Services.AddCors(options =>
         });
 });
 
-// 5. Đăng ký Cloudinary Service
+// C. Cloudinary Service
 builder.Services.AddScoped<IImageUploader, CloudinaryUploader>();
 
-// 6. Các dịch vụ API & Swagger
+// D. Cấu hình MassTransit RabbitMQ (QUAN TRỌNG: Để RabbitMQ nhảy số)
+builder.Services.AddMassTransit(x => {
+    x.UsingRabbitMq((context, cfg) => {
+        cfg.Host("aura-rabbitmq", "/", h => { 
+            h.Username("guest");
+            h.Password("guest");
+        });
+    });
+});
+
+// E. Cấu hình JWT Authentication (Để nút Authorize hoạt động)
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "AuraSystem_Super_Secret_Key_2025"; 
+builder.Services.AddAuthentication(options => {
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options => {
+    options.TokenValidationParameters = new TokenValidationParameters {
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+    };
+});
+
+// F. Swagger với nút Authorize (Ổ khóa)
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
+builder.Services.AddSwaggerGen(c => {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA Imaging API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme.",
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme {
+        Description = "Nhập Token: Bearer {your_token}",
         Name = "Authorization",
         In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer"
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
     });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            new List<string>()
-        }
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement {
+        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }, new string[] { } }
     });
 });
 
 var app = builder.Build();
 
 // =========================================================================
-// 👇👇👇 [ĐOẠN CODE MỚI THÊM] TỰ ĐỘNG TẠO BẢNG DATABASE 👇👇👇
+// 2. MIGRATION & MIDDLEWARE
 // =========================================================================
-using (var scope = app.Services.CreateScope())
-{
+
+using (var scope = app.Services.CreateScope()) {
     var services = scope.ServiceProvider;
-    try
-    {
+    try {
         var context = services.GetRequiredService<ImagingDbContext>();
-        context.Database.Migrate(); // Tự động chạy lệnh update-database
-        Console.WriteLine("--> [Imaging] Đã tự động tạo bảng thành công!");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine("--> [Imaging] Lỗi tạo bảng: " + ex.Message);
-    }
+        if (context.Database.GetPendingMigrations().Any()) context.Database.Migrate();
+    } catch (Exception ex) { Console.WriteLine($"--> Migration failed: {ex.Message}"); }
 }
-// 👆👆👆 [KẾT THÚC ĐOẠN CODE MỚI] 👆👆👆
-// =========================================================================
 
-
-// 7. Middleware Pipeline
-if (app.Environment.IsDevelopment())
-{
+if (app.Environment.IsDevelopment()) {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// app.UseHttpsRedirection(); // Tắt HTTPS ở môi trường dev docker
+// Prometheus Metrics (Phải đặt TRƯỚC các middleware khác)
+app.UseHttpMetrics(); 
 
 app.UseCors("AllowReactApp");
 
-// QUAN TRỌNG: Thứ tự phải đúng (Auth -> Autho)
-app.UseAuthentication();
+// THỨ TỰ QUAN TRỌNG: Authentication trước Authorization
+app.UseAuthentication(); 
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapMetrics(); // Endpoint cho Prometheus lấy dữ liệu
 
 app.Run();

@@ -38,6 +38,10 @@ namespace AURA.Services.Identity.Infrastructure.Services
                 
                 // QUAN TRỌNG: Claim Role để Authorization Middleware đọc được
                 new Claim(ClaimTypes.Role, user.Role), 
+
+                // --- CODE MỚI: THÊM CLINIC ID VÀO TOKEN ---
+                // Nếu User có ClinicId thì đưa vào Token, nếu không (như SuperAdmin) thì để trống
+                new Claim("clinicId", user.ClinicId?.ToString() ?? string.Empty),
                 
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };

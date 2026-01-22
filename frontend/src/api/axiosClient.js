@@ -1,17 +1,17 @@
-// src/api/axiosClient.js
+// frontend/src/api/axiosClient.js
 import axios from 'axios';
 
 const axiosClient = axios.create({
-    // Port 5001 là port của Identity Service trong file docker-compose.yml
-    baseURL: 'http://localhost:5001/api', 
+    // baseURL chỉ dừng ở /api
+    baseURL: 'http://localhost/api', 
     headers: {
         'Content-Type': 'application/json',
     },
-}); 
+});
 
-// Tự động đính kèm Token nếu user đã đăng nhập
-axiosClient.interceptors.request.use(async (config) => {
-    const token = localStorage.getItem('aura_token');
+// Thêm interceptors nếu cần (để đính kèm Token JWT)
+axiosClient.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }

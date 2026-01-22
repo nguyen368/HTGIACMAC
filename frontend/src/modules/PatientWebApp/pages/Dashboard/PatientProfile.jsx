@@ -5,7 +5,7 @@ import { useAuth } from '../../../../context/AuthContext';
 const PatientProfile = () => {
     const { user, login } = useAuth();
     const [loading, setLoading] = useState(false);
-    const [errors, setErrors] = useState({});
+    const [fieldErrors, setFieldErrors] = useState({}); // Lưu lỗi chi tiết từng ô
     
     const [formData, setFormData] = useState({
         fullName: '',
@@ -15,90 +15,62 @@ const PatientProfile = () => {
         address: ''
     });
 
-    // --- HÀM LÀM SẠCH SỐ ĐIỆN THOẠI (FIX MỚI) ---
-    const cleanPhoneNumber = (raw) => {
-        if (!raw) return '';
-        let str = String(raw).trim();
-
-        // Trường hợp 1: Bạn nhập +84038... (Dư số 0 sau mã vùng)
-        // Cắt bỏ 4 ký tự đầu (+840) rồi thêm lại số 0
-        if (str.startsWith('+840')) {
-            return '0' + str.slice(4); 
-        }
-
-        // Trường hợp 2: Bạn nhập +8438... (Chuẩn quốc tế)
-        // Cắt bỏ 3 ký tự đầu (+84) rồi thêm số 0
-        if (str.startsWith('+84')) {
-            return '0' + str.slice(3);
-        }
-
-        // Trường hợp 3: Bạn nhập 840... (Quên dấu +)
-        if (str.startsWith('840')) {
-            return '0' + str.slice(3);
-        }
-
-        return str;
-    };
-
     useEffect(() => {
         if (user) {
             setFormData({
-                fullName: user.fullName || '',
-                dateOfBirth: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : '',
-                gender: (user.gender === 'Male' ? 'Nam' : (user.gender === 'Female' ? 'Nữ' : (user.gender || 'Nam'))),
-                
-                // Áp dụng hàm làm sạch ngay khi load dữ liệu
-                phoneNumber: cleanPhoneNumber(user.phoneNumber),
-                
-                address: user.address || ''
+                fullName: user.fullName || user.FullName || '',
+                dateOfBirth: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : (user.DateOfBirth ? user.DateOfBirth.split('T')[0] : ''),
+                gender: (user.gender === 'Male' || user.Gender === 'Male') ? 'Nam' : 'Nữ',
+                phoneNumber: user.phoneNumber || user.PhoneNumber || '',
+                address: user.address || user.Address || ''
             });
         }
     }, [user]);
 
-    const validateForm = () => {
-        const newErrors = {};
-        if (!formData.fullName || formData.fullName.trim().length < 2) {
-            newErrors.fullName = "Vui lòng nhập họ tên hợp lệ.";
-        }
-        
-        // Validate: Chỉ chấp nhận số, 10 ký tự, bắt đầu bằng 0
-        if (!formData.phoneNumber) {
-            newErrors.phoneNumber = "Vui lòng nhập số điện thoại.";
-        } else if (!/^0\d{9}$/.test(formData.phoneNumber)) {
-            newErrors.phoneNumber = "SĐT phải có 10 số và bắt đầu bằng 0.";
-        }
-
-        if (!formData.dateOfBirth) newErrors.dateOfBirth = "Vui lòng chọn ngày sinh.";
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-        if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
+        if (fieldErrors[name]) setFieldErrors(prev => ({ ...prev, [name]: null }));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!validateForm()) return;
-
         setLoading(true);
-        try {
-            await medicalApi.updateProfile(formData);
-            
-            const updatedUser = { 
-                ...user, 
-                ...formData,
-            };
-            const token = localStorage.getItem('aura_token');
-            login({ ...updatedUser, token }); 
+        setFieldErrors({});
 
+        try {
+            // --- LÀM SẠCH DỮ LIỆU SĐT ĐỂ KHỚP REGEX BACKEND ---
+            let cleanPhone = formData.phoneNumber.trim().replace(/\s/g, '');
+            if (cleanPhone.startsWith('+84')) cleanPhone = '0' + cleanPhone.slice(3);
+            if (cleanPhone.startsWith('84') && cleanPhone.length > 10) cleanPhone = '0' + cleanPhone.slice(2);
+
+            const requestData = {
+                FullName: formData.fullName,
+                PhoneNumber: cleanPhone,
+                Address: formData.address,
+                Gender: formData.gender === 'Nam' ? 'Male' : 'Female',
+                DateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : null
+            };
+
+            const response = await medicalApi.updateProfile(requestData);
+            
+            if (login) await login(response); 
             alert("✅ Cập nhật hồ sơ thành công!");
         } catch (error) {
-            console.error("Lỗi:", error);
-            alert("❌ Có lỗi xảy ra: " + (error.response?.data?.title || error.message));
+            if (error.response && error.response.status === 400) {
+                // Xử lý lỗi validation từ FluentValidation Backend
+                const serverErrors = error.response.data.errors;
+                console.error("Validation Errors:", serverErrors);
+                
+                // Nếu lỗi trả về dạng mảng chuỗi (như log bạn gửi)
+                if (Array.isArray(serverErrors)) {
+                    alert("❌ Lỗi: " + serverErrors.join("\n"));
+                } else {
+                    alert("❌ Lỗi dữ liệu: Vui lòng kiểm tra lại Số điện thoại hoặc Họ tên.");
+                }
+            } else {
+                alert("❌ Lỗi hệ thống (500): Hãy chắc chắn đã chạy 'dotnet ef database update'");
+            }
         } finally {
             setLoading(false);
         }
@@ -107,57 +79,54 @@ const PatientProfile = () => {
     return (
         <div className="pro-card">
             <div className="card-header">
-                <h3>Thông tin hành chính</h3>
+                <div>
+                    <h3>Hồ sơ sức khỏe</h3>
+                    <p className="subtitle">Mã bệnh nhân: {user?.id || 'Chưa khởi tạo'}</p>
+                </div>
                 <button className="btn-save" onClick={handleSubmit} disabled={loading}>
-                    {loading ? 'Đang lưu...' : 'Lưu Thay Đổi'}
+                    {loading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-save"></i>} 
+                    {loading ? ' Đang lưu...' : ' Lưu thay đổi'}
                 </button>
             </div>
-            
+
             <div className="form-body">
                 <div className="input-grid">
                     <div className="input-group">
-                        <label>Họ và tên *</label>
-                        <input type="text" name="fullName" 
-                            className={`input-field ${errors.fullName ? 'error' : ''}`} 
-                            value={formData.fullName} onChange={handleChange} />
+                        <label>HỌ VÀ TÊN *</label>
+                        <input type="text" name="fullName" className="input-field" 
+                            value={formData.fullName} onChange={handleChange} placeholder="Nhập đầy đủ họ tên" />
                     </div>
-
                     <div className="input-group">
-                        <label>Số điện thoại *</label>
-                        <input type="text" name="phoneNumber" 
-                            className={`input-field ${errors.phoneNumber ? 'error' : ''}`} 
-                            value={formData.phoneNumber} onChange={handleChange} 
-                            placeholder="0912345678"
+                        <label>SỐ ĐIỆN THOẠI *</label>
+                        <input 
+                            type="text" 
+                            name="phoneNumber"
+                            className="input-field" 
+                            value={formData.phoneNumber} 
+                            onChange={handleChange}
+                            placeholder="Ví dụ: 0912345678"
+                            // Nếu đã có SĐT thì khóa, nếu chưa có thì cho phép nhập
+                            readOnly={!!(user?.phoneNumber || user?.PhoneNumber)} 
+                            style={!!(user?.phoneNumber || user?.PhoneNumber) ? {background: '#f1f5f9'} : {}}
                         />
-                        {/* Hiển thị lỗi nếu có */}
-                        {errors.phoneNumber && (
-                            <span className="error-text">
-                                <i className="fas fa-exclamation-circle"></i> {errors.phoneNumber}
-                            </span>
-                        )}
                     </div>
-
                     <div className="input-group">
-                        <label>Ngày sinh *</label>
-                        <input type="date" name="dateOfBirth" 
-                            className={`input-field ${errors.dateOfBirth ? 'error' : ''}`} 
+                        <label>NGÀY SINH *</label>
+                        <input type="date" name="dateOfBirth" className="input-field" 
                             value={formData.dateOfBirth} onChange={handleChange} />
                     </div>
-
                     <div className="input-group">
-                        <label>Giới tính *</label>
-                        <select name="gender" className="input-field" 
-                            value={formData.gender} onChange={handleChange}>
+                        <label>GIỚI TÍNH *</label>
+                        <select name="gender" className="input-field" value={formData.gender} onChange={handleChange}>
                             <option value="Nam">Nam</option>
                             <option value="Nữ">Nữ</option>
-                            <option value="Khác">Khác</option>
                         </select>
                     </div>
                 </div>
-                <div className="input-group">
-                    <label>Địa chỉ thường trú</label>
+                <div className="input-group" style={{marginTop: '20px'}}>
+                    <label>ĐỊA CHỈ THƯỜNG TRÚ</label>
                     <input type="text" name="address" className="input-field" 
-                        value={formData.address} onChange={handleChange} />
+                        value={formData.address} onChange={handleChange} placeholder="Số nhà, tên đường, phường/xã..." />
                 </div>
             </div>
         </div>

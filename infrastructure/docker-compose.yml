@@ -51,23 +51,24 @@ services:
   # 4. IMAGING SERVICE
   imaging-service:
     container_name: imaging-service
+    restart: always
     build:
       context: ../
       dockerfile: backend/src/Services/Imaging/AURA.Services.Imaging.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_imaging_db;Username=admin;Password=zxc123456
-      - CloudinarySettings__CloudName=test
-      - CloudinarySettings__ApiKey=test
-      - CloudinarySettings__ApiSecret=test
     ports:
       - "5003:8080"
+    volumes:
+      - ./uploads_data:/app/uploads
     depends_on:
       - aura.db
+      - rabbitmq
     networks:
       - aura-network
 
-  # 5. BILLING SERVICE
+  # 5. BILLING SERVICE 
   billing-service:
     container_name: billing-service
     build:
@@ -75,11 +76,6 @@ services:
       dockerfile: backend/src/Services/Billing/AURA.Services.Billing.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_billing_db;Username=admin;Password=zxc123456
-    ports:
-      - "5004:8080"
-    depends_on:
-      - aura.db
     networks:
       - aura-network
 
@@ -91,21 +87,26 @@ services:
       dockerfile: backend/src/Services/Notification/AURA.Services.Notification.API/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq
     ports:
       - "5005:8080"
+    depends_on:
+      - rabbitmq
     networks:
       - aura-network
 
   # 7. AI CORE SERVICE
-  aicore-service:
-    container_name: aicore-service
+  ai-core-service:
+    container_name: ai-core-service
+    restart: always
     build:
       context: ../backend/src/Services/AICore
-      dockerfile: Dockerfile
-    environment:
-      - PORT=8001
+      dockerfile: Dockerfile 
     ports:
-      - "8001:8001"
+      - "5006:8000"
+    volumes:
+      - ./uploads_data:/app/uploads
+      - ./ai_static:/app/static/results
     networks:
       - aura-network
 
@@ -122,30 +123,20 @@ services:
       - medical-record-service
       - imaging-service
       - billing-service
-      - notification-service
-      - aicore-service
     networks:
       - aura-network
 
-  # 9. FRONTEND (Đã sửa lỗi volume)
-  frontend:
-    container_name: aura-frontend
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    volumes:
-      - ../frontend:/app
-      - /app/node_modules  # 👈 DÒNG QUAN TRỌNG NHẤT ĐỂ FIX LỖI 127
-    environment:
-      - WATCHPACK_POLLING=true
-      - CHOKIDAR_USEPOLLING=true
-      - REACT_APP_API_URL=http://localhost/api
-      - WDS_SOCKET_PORT=0
-    command: npm start
-      
+  # 9. RabbitMQ 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: aura-rabbitmq
     restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
     networks:
       - aura-network
 

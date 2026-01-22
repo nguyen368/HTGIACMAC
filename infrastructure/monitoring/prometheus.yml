@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 5s # Quét dữ liệu mỗi 5s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'imaging-service'
+    metrics_path: '/metrics' # Đường dẫn .NET sẽ xuất dữ liệu
+    static_configs:
+      - targets: ['imaging-service:8080']
+        
+  - job_name: 'ai-core-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['ai-core-service:8000']

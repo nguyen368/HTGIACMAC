@@ -24,7 +24,6 @@ const ClinicUploadPage = () => {
   const fetchPatients = useCallback(async () => {
     try {
         const res = await authApi.getAllPatients();
-        // Bóc tách dữ liệu từ lớp Wrapper Result<T> của Backend
         const data = res.value || res.data?.value || res;
         const patientList = Array.isArray(data) ? data : [];
         setPatients(patientList);
@@ -87,17 +86,13 @@ const ClinicUploadPage = () => {
       }
       const details = res.details || res.Details || [];
       setUploadResults(details);
+      
       if (activeUploadMode === 'single' && details.length > 0) {
-          const item = details[0];
-          const newImageId = item.Id || item.id; 
-          if (item.status === 'Success' && newImageId) {
-              setTimeout(() => {
-                  if (window.confirm("Upload thành công! Chuyển sang màn hình chẩn đoán ngay?")) {
-                      navigate(`/clinic/exam/${newImageId}`);
-                  }
-              }, 100);
-          }
-      } else { alert(`✅ Xử lý thành công!`); }
+         // Single mode logic if needed
+      } else { 
+        if(activeUploadMode === 'batch') alert(`✅ Xử lý hoàn tất lô ảnh!`); 
+      }
+      
       fetchStats(); 
     } catch (err) {
       alert("❌ Lỗi hệ thống: " + (err.message || "Unknown"));
@@ -155,6 +150,8 @@ const ClinicUploadPage = () => {
         {renderSidebar()}
         <div className="services-container">
             {(activeTab === 'upload' || activeTab === 'storage') && renderPatientSelector()}
+            
+            {/* --- TAB UPLOAD & AI --- */}
             {activeTab === 'upload' && (
                 <div className="service-content active">
                     <h2 className="section-title-main">Upload Hình ảnh</h2>
@@ -185,25 +182,120 @@ const ClinicUploadPage = () => {
                         </div>
                     </div>
                     <div style={{textAlign: 'center', marginBottom: '30px'}}><button className="btn-modern" onClick={handleUpload} disabled={!selectedFile || !selectedPatientId || loading}>{loading ? "Đang xử lý..." : "Bắt đầu Upload"}</button></div>
+                    
+                    {/* [ĐÃ CẬP NHẬT LOGIC HIỂN THỊ KẾT QUẢ ĐỂ FIX LỖI N/A] */}
                     {uploadResults.length > 0 && (
-                        <div className="modern-table-container">
-                             <table className="modern-table">
-                                <thead><tr><th>Tên file</th><th>Kết quả</th><th>Chi tiết</th><th>Hành động</th></tr></thead>
-                                <tbody>
-                                    {uploadResults.map((item, idx) => (
-                                        <tr key={idx}>
-                                            <td>{item.fileName}</td>
-                                            <td>{item.status === 'Success' ? <span className="badge success">Thành công</span> : <span className="badge danger">Lỗi</span>}</td>
-                                            <td>{item.aiNote || item.error}</td>
-                                            <td>{item.status === 'Success' && <button className="btn-sm" onClick={() => navigate(`/clinic/exam/${item.Id || item.id}`)}>Chi tiết</button>}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="results-wrapper" style={{ marginTop: '30px' }}>
+                            {uploadResults.map((item, idx) => {
+                                // 1. Lấy điểm rủi ro
+                                const riskScore = item.aiDiagnosis?.risk_score || item.aiDiagnosis?.riskScore || 0;
+
+                                // 2. Logic tính Level thủ công (Fix lỗi N/A cho Bác sĩ)
+                                let displayRiskLevel = item.aiDiagnosis?.risk_level || item.aiDiagnosis?.riskLevel;
+                                if (!displayRiskLevel || displayRiskLevel === "N/A" || displayRiskLevel === "Unknown") {
+                                    if (riskScore >= 80) displayRiskLevel = "High (Nguy hiểm)";
+                                    else if (riskScore >= 40) displayRiskLevel = "Medium (Cảnh báo)";
+                                    else displayRiskLevel = "Low (Bình thường)";
+                                }
+
+                                // 3. Logic kiểm tra Rejected
+                                const isRejected = item.status === 'Rejected' || 
+                                                   (item.aiDiagnosis && (item.aiDiagnosis.status === 'Rejected' || displayRiskLevel === 'Invalid'));
+
+                                return (
+                                <div key={idx} style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', overflow: 'hidden', marginBottom: '20px', border: '1px solid #e0e0e0' }}>
+                                    
+                                    {/* Header Kết quả */}
+                                    <div style={{ background: isRejected ? '#fef2f2' : (item.status === 'Success' ? '#f0fdf4' : '#fef2f2'), padding: '15px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <span style={{ fontWeight: 'bold', fontSize: '16px' }}>File: {item.fileName}</span>
+                                            {isRejected 
+                                                ? <span className="badge danger" style={{ marginLeft: '10px' }}>Bị Từ Chối</span>
+                                                : (item.status === 'Success' ? <span className="badge success" style={{ marginLeft: '10px' }}>Thành công</span> : <span className="badge danger" style={{ marginLeft: '10px' }}>Lỗi</span>)
+                                            }
+                                        </div>
+                                        {item.status === 'Success' && !isRejected && (
+                                            <button className="btn-sm" style={{display:'flex', alignItems:'center', gap:'5px'}} onClick={() => navigate(`/clinic/exam/${item.Id || item.id}`)}>
+                                                Vào hồ sơ bệnh án <i className="fas fa-arrow-right"></i>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Body hiển thị Heatmap */}
+                                    {item.aiDiagnosis ? (
+                                        <div style={{ padding: '20px' }}>
+                                            <h4 style={{ color: isRejected ? '#991b1b' : '#0369a1', marginBottom: '15px', borderLeft: isRejected ? '4px solid #ef4444' : '4px solid #0369a1', paddingLeft: '10px', display: 'flex', alignItems:'center', gap:'10px' }}>
+                                                <span>{isRejected ? '⚠️ CẢNH BÁO TỪ AI' : '🤖 Kết quả Phân tích AI (Deep Learning)'}</span>
+                                            </h4>
+
+                                            <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+                                                {/* CỘT 1: ẢNH GỐC */}
+                                                <div style={{ flex: 1, minWidth: '300px' }}>
+                                                    <p style={{ fontWeight: '600', marginBottom: '8px', color: '#555' }}>📸 Ảnh gốc</p>
+                                                    <div style={{background:'#000', borderRadius: '8px', padding:'2px'}}>
+                                                        <img 
+                                                            src={item.Url || item.url} 
+                                                            alt="Original" 
+                                                            style={{ width: '100%', borderRadius: '6px', maxHeight: '300px', objectFit: 'contain', display: 'block' }} 
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* CỘT 2: HEATMAP (XỬ LÝ LỖI GIẬT HÌNH) */}
+                                                <div style={{ flex: 1, minWidth: '300px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                        <p style={{ fontWeight: '600', color: isRejected ? '#ef4444' : '#dc2626' }}>
+                                                            {isRejected ? '🚫 Trạng thái' : '🔥 Vùng tổn thương (Heatmap)'}
+                                                        </p>
+                                                        {!isRejected && (
+                                                            <span style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
+                                                                Risk: {Math.round(riskScore)}%
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    <div style={{ position: 'relative', background:'#000', borderRadius: '8px', padding:'2px', border: isRejected ? '2px dashed #cbd5e1' : '2px solid #ef4444', minHeight: '200px', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                                                        {isRejected ? (
+                                                            <div style={{textAlign: 'center', color: '#ef4444', padding: '20px'}}>
+                                                                <i className="fas fa-ban" style={{fontSize: '48px', marginBottom: '15px', opacity: 0.8}}></i>
+                                                                <p style={{color: '#fff', margin: 0}}>Không thể phân tích</p>
+                                                            </div>
+                                                        ) : (
+                                                            <img 
+                                                                src={item.aiDiagnosis.heatmap_url || item.aiDiagnosis.heatmap} 
+                                                                alt="AI Heatmap" 
+                                                                style={{ width: '100%', borderRadius: '6px', maxHeight: '300px', objectFit: 'contain', display: 'block' }} 
+                                                                onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/400x300?text=Heatmap+Loading..."; }}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* KẾT LUẬN */}
+                                            <div style={{ marginTop: '20px', padding: '15px', background: isRejected ? '#fef2f2' : '#f8fafc', borderRadius: '8px', borderLeft: isRejected ? '4px solid #ef4444' : '4px solid #3b82f6' }}>
+                                                <p style={{ margin: 0, fontSize: '16px' }}>
+                                                    <strong>{isRejected ? 'Lý do từ chối:' : 'Chẩn đoán sơ bộ:'}</strong> <span style={{ color: isRejected ? '#991b1b' : '#1e3a8a', fontWeight: 'bold' }}>{item.aiDiagnosis.diagnosis || item.aiDiagnosis.result}</span>
+                                                </p>
+                                                <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#64748b' }}>
+                                                    <em>*Mức độ rủi ro: <strong>{displayRiskLevel}</strong></em>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div style={{ padding: '20px', color: '#666', fontStyle: 'italic' }}>
+                                            {item.aiNote || item.error || "Không có dữ liệu chẩn đoán AI cho ảnh này."}
+                                        </div>
+                                    )}
+                                </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
             )}
+
+            {/* --- TAB KHO DỮ LIỆU --- */}
             {activeTab === 'storage' && (
                 <div className="service-content active">
                     <div className="section-header-wrapper"><h2 className="section-title-main">Thư viện ảnh</h2><button className="btn-modern" onClick={fetchPatientImages}><i className="fas fa-sync"></i> Refresh</button></div>
@@ -219,9 +311,13 @@ const ClinicUploadPage = () => {
                     )}
                 </div>
             )}
+
+            {/* --- TAB LỊCH SỬ --- */}
             {activeTab === 'validation' && (
                 <div className="service-content active"><h3>Hoạt động gần đây</h3><div className="modern-table-container"><table className="modern-table"><thead><tr><th>Thời gian</th><th>Ảnh</th><th>Trạng thái</th></tr></thead><tbody>{stats?.recentActivity?.map((act, idx) => (<tr key={idx}><td>{act.uploadedAt}</td><td><img src={act.imageUrl} alt="thumb" style={{width: 40, borderRadius: 4}}/></td><td><span className="badge success">Đã lưu</span></td></tr>))}</tbody></table></div></div>
             )}
+
+            {/* --- TAB THỐNG KÊ --- */}
             {activeTab === 'analytics' && (
                 <div className="service-content active"><h3>Thống kê hệ thống</h3><div className="stats-grid"><div className="stat-card"><h4>Tổng ảnh</h4><div className="stat-value">{stats?.summary?.totalScans || 0}</div></div></div></div>
             )}
