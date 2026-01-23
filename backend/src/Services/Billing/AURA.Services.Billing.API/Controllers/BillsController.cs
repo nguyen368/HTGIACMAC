@@ -5,6 +5,7 @@ using AURA.Services.Billing.Infrastructure.Data;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace AURA.Services.Billing.API.Controllers
 {
@@ -19,6 +20,10 @@ namespace AURA.Services.Billing.API.Controllers
             _context = context;
         }
 
+        // ===========================
+        // 1. TẠO & LẤY HÓA ĐƠN
+        // ===========================
+
         // POST: api/bills
         [HttpPost]
         public async Task<IActionResult> CreateBill([FromBody] CreateBillRequest request)
@@ -27,7 +32,8 @@ namespace AURA.Services.Billing.API.Controllers
             var newBill = new Bill
             {
                 PatientId = request.PatientId,
-                Status = "Pending"
+                Status = "Pending",
+                CreatedAt = DateTime.UtcNow
             };
 
             // 2. Thêm dịch vụ
@@ -58,8 +64,49 @@ namespace AURA.Services.Billing.API.Controllers
         public async Task<IActionResult> GetBills()
         {
             // Lấy tất cả hóa đơn từ Database về
-            var bills = await _context.Bills.ToListAsync();
+            var bills = await _context.Bills.Include(b => b.Items).OrderByDescending(b => b.CreatedAt).ToListAsync();
             return Ok(bills);
+        }
+
+        // ===========================
+        // 2. THANH TOÁN & THỐNG KÊ (NEW)
+        // ===========================
+
+        // [POST] Thanh toán (Giả lập)
+        [HttpPost("pay/{billId}")]
+        public async Task<IActionResult> ProcessPayment(Guid billId)
+        {
+            var bill = await _context.Bills.FindAsync(billId);
+            if (bill == null) return NotFound();
+
+            if (bill.Status == "Paid") return BadRequest("Hóa đơn đã thanh toán");
+
+            bill.Status = "Paid";
+            bill.PaidAt = DateTime.UtcNow;
+            
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Thanh toán thành công" });
+        }
+
+        // [GET] ADMIN DASHBOARD: Thống kê doanh thu 7 ngày qua
+        [HttpGet("admin/revenue-chart")]
+        public async Task<IActionResult> GetRevenueChart()
+        {
+            var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
+            
+            // Logic Group By để tính tổng tiền theo ngày
+            var data = await _context.Bills
+                .Where(b => b.CreatedAt >= sevenDaysAgo && b.Status == "Paid") // Chỉ tính bill đã trả
+                .GroupBy(b => b.CreatedAt.Date)
+                .Select(g => new {
+                    Date = g.Key,
+                    TotalAmount = g.Sum(b => b.TotalAmount),
+                    Count = g.Count()
+                })
+                .OrderBy(x => x.Date)
+                .ToListAsync();
+
+            return Ok(data);
         }
     }
 

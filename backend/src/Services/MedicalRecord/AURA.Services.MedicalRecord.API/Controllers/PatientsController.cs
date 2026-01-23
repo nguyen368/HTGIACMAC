@@ -27,7 +27,6 @@ public class PatientsController : ControllerBase
     // 1. QUẢN LÝ HỒ SƠ CÁ NHÂN (PROFILE)
     // =================================================================================
 
-    // [POST] api/patients -> Tạo hồ sơ lần đầu
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] UpdatePatientProfileRequest request)
     {
@@ -52,7 +51,6 @@ public class PatientsController : ControllerBase
         return Ok(patient);
     }
 
-    // [GET] api/patients/me -> Xem hồ sơ của chính mình
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
@@ -61,16 +59,14 @@ public class PatientsController : ControllerBase
 
         var patient = await _context.Patients
             .Include(p => p.MedicalHistories) 
-            .AsNoTracking() // Tối ưu đọc
+            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.UserId == userId);
 
-        // Nếu chưa có hồ sơ, trả về 404 hoặc null tùy logic FE, ở đây return NotFound để FE biết redirect
         if (patient == null) return NotFound("Chưa cập nhật hồ sơ y tế.");
 
         return Ok(patient);
     }
 
-    // [PUT] api/patients/me -> Cập nhật thông tin (Đã giữ logic UPSERT của bạn)
     [HttpPut("me")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdatePatientProfileRequest request)
     {
@@ -86,7 +82,6 @@ public class PatientsController : ControllerBase
         var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
 
-        // 3. Logic UPSERT (Update or Insert) - FIX QUAN TRỌNG
         if (patient == null) 
         {
             patient = new Patient(userId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
@@ -102,6 +97,10 @@ public class PatientsController : ControllerBase
         return Ok(patient);
     }
 
+    // =================================================================================
+    // 2. LỊCH SỬ KHÁM BỆNH & CDS VIEW
+    // =================================================================================
+
     [HttpGet("examinations")]
     public async Task<IActionResult> GetExaminationHistory()
     {
@@ -114,9 +113,48 @@ public class PatientsController : ControllerBase
                                   .AsNoTracking()
                                   .Where(e => e.PatientId == patient.Id)
                                   .OrderByDescending(e => e.ExamDate)
+                                  .Select(e => new {
+                                      e.Id,
+                                      e.ExamDate,
+                                      e.ImageUrl,
+                                      e.Status,
+                                      // Hiển thị kết quả sơ bộ
+                                      Result = e.Status == "Verified" ? e.Diagnosis : (e.Status == "Analyzed" ? e.AiDiagnosis : "Đang xử lý"),
+                                      e.AiRiskLevel
+                                  })
                                   .ToListAsync();
 
         return Ok(exams);
+    }
+
+    // [MỚI] Xem chi tiết 1 ca khám (Bao gồm Heatmap AI)
+    [HttpGet("examinations/{examId}")]
+    public async Task<IActionResult> GetExamDetail(Guid examId)
+    {
+        var userId = GetUserIdFromToken();
+        var patient = await _context.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId);
+        if (patient == null) return Unauthorized();
+
+        var exam = await _context.Examinations
+            .Where(e => e.Id == examId && e.PatientId == patient.Id)
+            .FirstOrDefaultAsync();
+
+        if (exam == null) return NotFound("Không tìm thấy ca khám này.");
+
+        return Ok(new {
+            exam.Id,
+            exam.ExamDate,
+            exam.ImageUrl,
+            exam.Status,
+            // Các trường AI
+            exam.HeatmapUrl,
+            exam.AiRiskScore,
+            exam.AiRiskLevel,
+            exam.AiDiagnosis,
+            // Kết quả cuối cùng
+            exam.Diagnosis,
+            exam.DoctorNotes
+        });
     }
 
     [HttpPost("{patientId}/history")]

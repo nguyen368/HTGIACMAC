@@ -14,7 +14,7 @@ const PatientHistory = () => {
     const fetchHistory = async () => {
         try {
             setLoading(true);
-            // Gọi API lấy lịch sử khám (Khớp với [HttpGet("examinations")])
+            // Gọi API lấy lịch sử khám
             const data = await medicalApi.getExaminationHistory();
             setHistory(data || []);
         } catch (err) {
@@ -25,13 +25,37 @@ const PatientHistory = () => {
         }
     };
 
-    // Hàm hỗ trợ hiển thị màu sắc dựa trên mức độ nghiêm trọng từ AI
-    const getSeverityClass = (severity) => {
-        switch (severity?.toLowerCase()) {
-            case 'normal': return 'status-normal';
-            case 'mild': return 'status-mild';
-            case 'moderate': return 'status-moderate';
-            case 'severe': return 'status-severe';
+    // [MỚI] Hàm xử lý xem báo cáo (Traceability)
+    const handleViewReport = async (examId) => {
+        try {
+            // Gọi API lấy dữ liệu báo cáo chi tiết
+            const report = await medicalApi.getReportData(examId);
+            
+            // Demo: Hiển thị thông tin truy xuất nguồn gốc qua Alert
+            // Trong thực tế, bạn có thể chuyển hướng sang trang in PDF
+            alert(
+                `📄 PHIẾU KẾT QUẢ ĐIỆN TỬ (Traceability Info)\n` +
+                `-----------------------\n` +
+                `Bệnh nhân: ${report.patientInfo.name}\n` +
+                `Ngày khám: ${new Date(report.printedAt).toLocaleDateString()}\n\n` +
+                `🔍 THÔNG SỐ KỸ THUẬT AI:\n` +
+                `- Model: ${report.technicalTraceability.systemName}\n` +
+                `- Version: ${report.technicalTraceability.algorithmVersion}\n` +
+                `- AI Confidence: ${report.technicalTraceability.aiConfidenceScore}%\n` +
+                `- Ngưỡng đánh giá: ${report.technicalTraceability.thresholds.HighRisk}`
+            );
+        } catch (error) {
+            console.error(error);
+            alert("Chưa có báo cáo chi tiết cho ca này hoặc hồ sơ chưa được bác sĩ duyệt.");
+        }
+    };
+
+    // Hàm hỗ trợ hiển thị màu sắc (Cập nhật theo dữ liệu Backend: Low/Medium/High)
+    const getSeverityClass = (riskLevel) => {
+        switch (riskLevel) {
+            case 'Low': return 'status-normal';      // Xanh
+            case 'Medium': return 'status-moderate'; // Vàng
+            case 'High': return 'status-severe';     // Đỏ
             default: return 'status-unknown';
         }
     };
@@ -46,7 +70,7 @@ const PatientHistory = () => {
     return (
         <div className="history-container animate-fade-in">
             <div className="history-header">
-                <h3>Lịch sử chẩn đoán mạch máu võng mạc</h3>
+                <h3>Lịch sử chẩn đoán mạch máu võng mạc </h3>
                 <p>Mã dự án: SP26SE025 | Dữ liệu được phân tích bởi AI Core</p>
             </div>
 
@@ -64,30 +88,56 @@ const PatientHistory = () => {
                             <div className="card-main-info">
                                 <div className="exam-date">
                                     <span className="label">Ngày khám:</span>
-                                    <span className="value">{new Date(item.examinationDate).toLocaleDateString('vi-VN')}</span>
+                                    <span className="value">{new Date(item.examDate).toLocaleDateString('vi-VN')}</span>
                                 </div>
-                                <div className={`diagnosis-badge ${getSeverityClass(item.severity)}`}>
-                                    {item.diagnosisResult || 'Chưa có kết quả'}
+                                
+                                {/* Hiển thị Trạng thái AI hoặc Kết quả Bác sĩ */}
+                                <div className={`diagnosis-badge ${getSeverityClass(item.aiRiskLevel)}`}>
+                                    {item.status === "Verified" ? (
+                                        <span><i className="fas fa-check-circle"></i> {item.result || item.diagnosis}</span>
+                                    ) : (
+                                        <span><i className="fas fa-cog fa-spin"></i> Đang phân tích...</span>
+                                    )}
                                 </div>
                             </div>
 
                             <div className="card-details">
                                 <div className="detail-item">
-                                    <span className="label">Bác sĩ phụ trách:</span>
-                                    <span className="value">{item.doctorName || 'Hệ thống tự động'}</span>
+                                    <span className="label">Ảnh chụp:</span>
+                                    {/* Hiển thị thumbnail ảnh mắt */}
+                                    <img 
+                                        src={item.imageUrl} 
+                                        alt="Scan" 
+                                        style={{width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #ddd'}}
+                                    />
                                 </div>
                                 <div className="detail-item">
-                                    <span className="label">Độ tin cậy AI:</span>
-                                    <span className="value">{(item.confidenceScore * 100).toFixed(1)}%</span>
+                                    <span className="label">Mức độ rủi ro (AI):</span>
+                                    <span className="value" style={{fontWeight: 'bold'}}>
+                                        {item.aiRiskLevel || 'N/A'} 
+                                        {item.aiRiskScore ? ` (${item.aiRiskScore}%)` : ''}
+                                    </span>
                                 </div>
                             </div>
 
                             <div className="card-actions">
-                                <button className="view-report-btn">
-                                    <i className="fas fa-file-medical"></i> Xem chi tiết báo cáo
-                                </button>
-                                <button className="download-btn">
-                                    <i className="fas fa-download"></i> Tải ảnh võng mạc
+                                {/* Chỉ hiện nút xem báo cáo khi hồ sơ đã được Verify */}
+                                {item.status === "Verified" ? (
+                                    <button 
+                                        className="view-report-btn"
+                                        onClick={() => handleViewReport(item.id)}
+                                    >
+                                        <i className="fas fa-file-medical"></i> Xem Báo Cáo Traceability
+                                    </button>
+                                ) : (
+                                    <button className="view-report-btn disabled" disabled>
+                                        <i className="fas fa-clock"></i> Chờ bác sĩ duyệt
+                                    </button>
+                                )}
+                                
+                                {/* Nút tải ảnh (Nếu cần) */}
+                                <button className="download-btn" onClick={() => window.open(item.imageUrl, '_blank')}>
+                                    <i className="fas fa-download"></i> Tải ảnh
                                 </button>
                             </div>
                         </div>

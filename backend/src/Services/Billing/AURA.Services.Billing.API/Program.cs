@@ -1,5 +1,7 @@
 using AURA.Services.Billing.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using MassTransit; // Thêm namespace
+using AURA.Services.Billing.API.Consumers; // Thêm namespace Consumer
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,9 +13,34 @@ builder.Services.AddCors(options =>
                         .AllowAnyMethod()
                         .AllowAnyHeader());
 });
+
 // Cấu hình kết nối DB
 builder.Services.AddDbContext<BillingDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// --- CẤU HÌNH RABBITMQ CHO BILLING (MỚI) ---
+// Billing Service cần lắng nghe khi có Ca khám mới để trừ tiền/tạo hóa đơn
+builder.Services.AddMassTransit(x =>
+{
+    // Đăng ký Consumer xử lý sự kiện ExaminationCreated
+    x.AddConsumer<ExaminationCreatedConsumer>();
+
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host(builder.Configuration["RabbitMq:Host"] ?? "rabbitmq", "/", h =>
+        {
+            h.Username(builder.Configuration["RabbitMq:Username"] ?? "guest");
+            h.Password(builder.Configuration["RabbitMq:Password"] ?? "guest");
+        });
+
+        // Định nghĩa Queue riêng cho Billing
+        cfg.ReceiveEndpoint("billing-exam-created", e =>
+        {
+            e.ConfigureConsumer<ExaminationCreatedConsumer>(context);
+        });
+    });
+});
+// -------------------------------------------
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

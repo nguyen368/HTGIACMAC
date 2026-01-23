@@ -13,10 +13,15 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+
+    <PackageReference Include="MassTransit" Version="8.1.3" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.1.3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AURA.Services.Billing.Infrastructure\AURA.Services.Billing.Infrastructure.csproj" />
+    <ProjectReference Include="..\AURA.Services.Billing.Domain\AURA.Services.Billing.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AURA.Shared.Kernel\AURA.Shared.Kernel.csproj" />
   </ItemGroup>
 
 </Project>
