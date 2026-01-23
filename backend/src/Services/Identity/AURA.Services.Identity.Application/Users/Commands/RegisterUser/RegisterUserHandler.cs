@@ -1,8 +1,12 @@
-using AURA.Services.Identity.Application.Interfaces; // <-- Đã thêm dòng này
+using AURA.Services.Identity.Application.Interfaces;
 using AURA.Services.Identity.Domain.Entities;
 using AURA.Services.Identity.Domain.Repositories;
 using AURA.Shared.Kernel.Wrapper;
 using MediatR;
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace AURA.Services.Identity.Application.Users.Commands.RegisterUser
 {
@@ -19,21 +23,33 @@ namespace AURA.Services.Identity.Application.Users.Commands.RegisterUser
 
         public async Task<Result<Guid>> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
         {
-            var existingUser = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken);
-            if (existingUser != null)
+            // 1. Kiểm tra Tên đăng nhập
+            var existingUserByUsername = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken);
+            if (existingUserByUsername != null)
             {
-                return Result<Guid>.Failure("Username already exists.");
+                return Result<Guid>.Failure("Tên đăng nhập này đã được sử dụng.");
             }
 
+            // 2. Kiểm tra Email (Đã sửa lỗi CS1501: Xóa cancellationToken ở đây)
+            var existingUserByEmail = await _userRepository.GetByEmailAsync(request.Email);
+            if (existingUserByEmail != null)
+            {
+                return Result<Guid>.Failure("Địa chỉ Email này đã được đăng ký tài khoản.");
+            }
+
+            // 3. Mã hóa mật khẩu
             var passwordHash = _passwordHasher.Hash(request.Password);
 
+            // 4. Xác định quyền hạn (Role)
             string role = "Patient";
-            if (!string.IsNullOrEmpty(request.Role) && (request.Role == "Admin" || request.Role == "Doctor"))
+            string[] validRoles = { "Admin", "Doctor", "Patient", "ClinicAdmin" };
+            
+            if (!string.IsNullOrEmpty(request.Role) && validRoles.Contains(request.Role))
             {
                 role = request.Role;
             }
 
-            // Entity đã có Id, Constructor sẽ gán vào property của lớp cha
+            // 5. Tạo User mới
             var newUser = new User(
                 Guid.NewGuid(),
                 request.Username,
@@ -43,6 +59,7 @@ namespace AURA.Services.Identity.Application.Users.Commands.RegisterUser
                 role
             );
 
+            // 6. Lưu vào DB
             await _userRepository.AddAsync(newUser);
             
             return Result<Guid>.Success(newUser.Id);

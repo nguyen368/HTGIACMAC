@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from prometheus_fastapi_instrumentator import Instrumentator
 from strategies import AIServiceContext, ResNetStrategy
 
-# --- CẤU HÌNH ĐƯỜNG DẪN TUYỆT ĐỐI ---
+# --- CẤU HÌNH ĐƯỜNG DẪN ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = "/app/static"
 RESULT_DIR = os.path.join(STATIC_DIR, "results")
@@ -28,7 +28,6 @@ class ImagePayload(BaseModel):
 def load_image_from_source(payload: ImagePayload):
     if payload.image_url and payload.image_url.startswith("http"):
         try:
-            print(f"--> [AI] Downloading from URL: {payload.image_url}")
             resp = requests.get(payload.image_url, timeout=15)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -40,45 +39,57 @@ def load_image_from_source(payload: ImagePayload):
 
 def check_retina_pro(img):
     """
-    LOGIC TRUY QUÉT NÂNG CAO: Tọa độ X, Y, cấu hình hình học và mật độ mạch máu.
+    LOGIC TRUY QUÉT CỰC HẠN (ULTRA-STRICT): 
+    Chỉ cho phép ảnh võng mạc đạt chuẩn y tế đi qua.
     """
     if img is None: return False, "Không đọc được dữ liệu ảnh", None, {}
     
-    # Chuẩn hóa kích thước để phân tích logic
+    # 1. Chuẩn hóa để phân tích chuyên sâu
     img_eval = cv2.resize(img, (512, 512))
-    gray = cv2.cvtColor(img_eval, cv2.COLOR_BGR2GRAY)
+    # Tăng cường độ tương phản để làm nổi bật mạch máu trước khi check
+    lab = cv2.cvtColor(img_eval, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    img_contrast = cv2.merge((cl,a,b))
+    img_contrast = cv2.cvtColor(img_contrast, cv2.COLOR_LAB2BGR)
+    
+    gray = cv2.cvtColor(img_contrast, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape
 
-    # 1. Tìm vòng tròn võng mạc (Hough Circle) - Xác định tâm X, Y
+    # 2. KIỂM TRA CẤU TRÚC HÌNH HỌC (Strict Hough Circle)
+    # Tăng param2 lên 45 để yêu cầu vòng tròn phải cực kỳ hoàn hảo
     circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1.2, 100, 
-                               param1=50, param2=35, minRadius=h//4, maxRadius=h//2)
+                                param1=50, param2=45, minRadius=h//4, maxRadius=h//2)
     
     cx, cy = 0, 0
     if circles is not None:
         circles = np.uint16(np.around(circles))
         cx, cy = int(circles[0, 0][0]), int(circles[0, 0][1])
     else:
-        return False, "Không phát hiện cấu trúc cầu mắt (Ảnh mặt hoặc sai tiêu cự)", img_eval, {}
+        return False, "Hệ thống từ chối: Không phát hiện cấu trúc nhãn cầu chuẩn y tế.", img_eval, {}
 
-    # 2. Kiểm tra mật độ mạch máu (Vessel Density) để loại bỏ ảnh da mặt
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    contrast = clahe.apply(gray)
-    vessels = cv2.adaptiveThreshold(contrast, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    # 3. KIỂM TRA MẬT ĐỘ MẠCH MÁU (High-Sensitivity Vessel Check)
+    # Ảnh võng mạc thật phải có hệ thống mạch máu chằng chịt
+    vessels = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    # Loại bỏ nhiễu nhỏ để chỉ giữ lại mạch máu thật
+    kernel = np.ones((2,2), np.uint8)
+    vessels = cv2.morphologyEx(vessels, cv2.MORPH_OPEN, kernel)
+    
     vessel_density = np.count_nonzero(vessels) / (h * w)
     
-    if vessel_density < 0.01: 
-        return False, "Không chứa đặc điểm mạch máu võng mạc (Ảnh khuôn mặt/da)", img_eval, {"x": cx, "y": cy}
+    # Nâng ngưỡng mật độ lên 0.02 (Khó tính hơn 0.015 cũ)
+    if vessel_density < 0.020: 
+        return False, "Hệ thống từ chối: Thiếu đặc điểm mạch máu võng mạc (Ảnh rác hoặc sai tiêu cự).", img_eval, {"x": cx, "y": cy}
 
-    # 3. Kiểm tra màu sắc (Sắc đỏ y tế)
+    # 4. KIỂM TRA PHỔ MÀU SINH HỌC (Biological Red-Orange Ratio)
+    # Võng mạc người có màu cam/đỏ đặc trưng. R phải áp đảo G và B một cách tuyệt đối.
     avg_color = np.mean(img_eval, axis=(0, 1))
-    if not (avg_color[2] > avg_color[1] * 1.15): 
-        return False, "Sai màu sắc đặc trưng của mô võng mạc", img_eval, {"x": cx, "y": cy}
+    # R (index 2) phải lớn hơn G (index 1) ít nhất 35% (1.35)
+    if not (avg_color[2] > avg_color[1] * 1.35): 
+        return False, "Hệ thống từ chối: Màu sắc không trùng khớp với mô sinh học võng mạc.", img_eval, {"x": cx, "y": cy}
 
     return True, "Hợp lệ", img_eval, {"x": cx, "y": cy, "vessel_score": round(vessel_density, 4)}
-
-@app.get("/")
-def read_root():
-    return {"status": "Online", "mode": "Strict Validation Enabled"}
 
 @app.post("/api/ai/auto-diagnosis")
 def auto_diagnosis(payload: ImagePayload):
@@ -86,7 +97,7 @@ def auto_diagnosis(payload: ImagePayload):
         img = load_image_from_source(payload)
         if img is None: return {"status": "Failed", "error": "AI could not load image"}
 
-        # THỰC THI TRUY QUÉT PRO
+        # THỰC THI KIỂM ĐỊNH ULTRA-STRICT
         is_valid, msg, img_matrix, meta = check_retina_pro(img)
         
         if not is_valid:
@@ -94,12 +105,12 @@ def auto_diagnosis(payload: ImagePayload):
                 "status": "Rejected", 
                 "diagnosis": msg, 
                 "risk_score": 0, 
-                "risk_level": "Invalid", 
+                "risk_level": "None", 
                 "heatmap_url": "",
                 "metadata": meta
             }
 
-        # CHẠY MODEL CHẨN ĐOÁN (Strategy Pattern)
+        # NẾU LÀ VÕNG MẠC THẬT -> MỚI CHẠY PHÂN TÍCH CHUYÊN SÂU
         context = AIServiceContext(ResNetStrategy())
         result = context.execute_analysis(img_matrix)
         risk_score = result.get('risk_percentage', 0)

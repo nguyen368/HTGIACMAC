@@ -1,28 +1,57 @@
-// frontend/src/api/medicalApi.js
-import axiosClient from "./axiosClient";
+import axios from "axios";
 
+// 1. Tạo instance axios trỏ đến Port 5002 (Hoặc dùng "/api" nếu chạy qua Gateway)
+const medicalClient = axios.create({
+  baseURL: "http://localhost:5002/api", 
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// 2. Interceptor gắn Token
+medicalClient.interceptors.request.use(async (config) => {
+    const token = localStorage.getItem('aura_token');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+// 3. Xử lý phản hồi
+medicalClient.interceptors.response.use(
+  (response) => response.data,
+  (error) => { throw error; }
+);
+
+// 4. Khai báo các hàm gọi API
 const medicalApi = {
-  // Lấy danh sách tất cả bệnh nhân
-  getAllPatients: () => {
-    return axiosClient.get("/patients"); 
-    // -> /api/patients (Gateway sẽ chuyển sang Medical Service)
-  },
-  
-  // Lấy chi tiết 1 bệnh nhân
-  getPatientById: (id) => {
-    return axiosClient.get(`/patients/${id}`);
+  getPatientProfile: () => {
+    return medicalClient.get("/patients/me");
   },
 
-  // Cập nhật hồ sơ cá nhân
+  getExaminationHistory: () => {
+    return medicalClient.get("/patients/examinations");
+  },
+
   updateProfile: (data) => {
-    return axiosClient.put("/patients/me", data);
+    return medicalClient.put("/patients/me", data);
   },
 
-  // Lưu kết quả khám
+  addMedicalHistory: (patientId, data) => {
+    return medicalClient.post(`/patients/${patientId}/history`, data);
+  },
+
+  // SỬA TẠI ĐÂY: Đổi axiosClient thành medicalClient
+  getAllPatients: () => {
+    return medicalClient.get("/patients"); 
+  },
+
+  getPatientById: (id) => {
+    return medicalClient.get(`/patients/${id}`);
+  },
+
   saveExamination: (data) => {
-    // Lưu ý: Đường dẫn này phải khớp với Nginx location
-    // Nếu Nginx cấu hình /api/examinations/ -> thì ở đây gọi /examinations
-    return axiosClient.post("/examinations", data);
+    return medicalClient.post("/medical-records/examinations", data);
   }
 };
 

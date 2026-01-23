@@ -1,31 +1,22 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-// SỬA: Bỏ dấu ngoặc {} để khớp với phiên bản 3.1.2
-import jwtDecode from "jwt-decode"; 
-
-// --- Import Pages: Auth ---
+import jwtDecode from "jwt-decode"; // SỬA: Bỏ {} để khớp phiên bản 3.1.2
 import AuthPage from '../modules/PatientWebApp/pages/Auth/AuthPage';
 
-// --- Import Pages: Patient ---
+// --- Import Pages ---
 import PatientLayout from '../modules/PatientWebApp/pages/Dashboard/PatientLayout';
 import PatientHome from '../modules/PatientWebApp/pages/Dashboard/PatientHome';
 import PatientProfile from '../modules/PatientWebApp/pages/Dashboard/PatientProfile';
 import PatientHistory from '../modules/PatientWebApp/pages/Dashboard/PatientHistory';
 import PatientUpload from '../modules/PatientWebApp/pages/Dashboard/PatientUpload';
-
-// --- Import Pages: Clinic (Doctor) ---
 import DoctorWorkstation from '../modules/ClinicWebApp/pages/components/DoctorWorkstation';
-
-// --- Import Pages: Admin ---
 import AdminLayout from '../modules/AdminWebApp/layouts/AdminLayout';
 import AdminDashboard from '../modules/AdminWebApp/pages/Dashboard/AdminDashboard';
 import UserManagement from '../modules/AdminWebApp/pages/Users/UserManagement';
 
-// =================================================================
-// 1. COMPONENT BẢO VỆ ROUTE (Authorization Guard)
-// =================================================================
+// 1. COMPONENT BẢO VỆ ROUTE
 const ProtectedRoute = ({ children, allowedRoles }) => {
-    const token = localStorage.getItem('aura_token');
+    const token = localStorage.getItem('aura_token'); // SỬA: Dùng đúng key 'aura_token'
     
     if (!token) return <Navigate to="/auth" replace />;
 
@@ -36,9 +27,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         
         const normalizedAllowedRoles = allowedRoles.map(r => r.toLowerCase());
 
-        if (allowedRoles && !normalizedAllowedRoles.includes(userRole)) {
-            localStorage.removeItem('aura_token'); 
-            return <Navigate to="/auth" replace />; 
+        if (!normalizedAllowedRoles.includes(userRole)) {
+            // Nếu sai quyền, đẩy về trang chủ để HomeRedirect xử lý lại
+            return <Navigate to="/" replace />; 
         }
 
         return children;
@@ -48,30 +39,19 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     }
 };
 
-// =================================================================
-// 2. COMPONENT ĐIỀU HƯỚNG TRANG CHỦ THÔNG MINH
-// =================================================================
+// 2. COMPONENT ĐIỀU HƯỚNG TRANG CHỦ THÔNG MINH (Đã tách riêng)
 const HomeRedirect = () => {
     const token = localStorage.getItem('aura_token');
-    
-    if (!token) {
-        return <Navigate to="/auth" replace />;
-    }
+    if (!token) return <Navigate to="/auth" replace />;
 
     try {
         const decoded = jwtDecode(token);
         const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
         const role = (decoded[roleKey] || decoded.role || '').toLowerCase();
 
-        if (role === 'superadmin' || role === 'admin' || role === 'administrator') {
-            return <Navigate to="/admin" replace />;
-        }
-        if (role === 'doctor') {
-            return <Navigate to="/doctor" replace />;
-        }
-        if (role === 'patient') {
-            return <Navigate to="/patient" replace />;
-        }
+        if (['superadmin', 'admin', 'administrator'].includes(role)) return <Navigate to="/admin" replace />;
+        if (role === 'doctor') return <Navigate to="/doctor" replace />;
+        if (role === 'patient') return <Navigate to="/patient" replace />;
         
         return <Navigate to="/auth" replace />;
     } catch {
@@ -79,18 +59,14 @@ const HomeRedirect = () => {
     }
 };
 
-// =================================================================
 // 3. CẤU HÌNH ROUTES CHÍNH
-// =================================================================
 const AppRoutes = () => {
     return (
         <Routes>
             <Route path="/" element={<HomeRedirect />} />
-            
             <Route path="/auth" element={<AuthPage />} />
-            <Route path="/login" element={<Navigate to="/auth" replace />} />
 
-            {/* Route Bác sĩ */}
+            {/* Route cho BÁC SĨ */}
             <Route 
                 path="/doctor" 
                 element={
@@ -100,7 +76,7 @@ const AppRoutes = () => {
                 } 
             />
 
-            {/* Route Bệnh nhân */}
+            {/* Route cho BỆNH NHÂN */}
             <Route 
                 path="/patient" 
                 element={
@@ -116,7 +92,7 @@ const AppRoutes = () => {
                 <Route path="upload" element={<PatientUpload />} />
             </Route>
 
-            {/* Route Admin */}
+            {/* Route cho ADMIN */}
             <Route 
                 path="/admin" 
                 element={

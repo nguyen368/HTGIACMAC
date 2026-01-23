@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck: # THÊM HEALTHCHECK CHO DB
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d aura_identity_db"]
       interval: 10s
       timeout: 5s
@@ -21,7 +21,7 @@ services:
     networks:
       - aura-network
 
-  # 9. RabbitMQ (ĐƯA LÊN TRƯỚC ĐỂ SERVICE GỌI)
+  # 2. RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management
     container_name: aura-rabbitmq
@@ -32,7 +32,7 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
-    healthcheck: # THÊM HEALTHCHECK CHO RABBITMQ
+    healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
@@ -40,7 +40,7 @@ services:
     networks:
       - aura-network
 
-  # 2. IDENTITY SERVICE
+  # 3. IDENTITY SERVICE
   identity-service:
     container_name: identity-service
     build:
@@ -56,13 +56,13 @@ services:
       - "5001:8080"
     depends_on:
       aura.db:
-        condition: service_healthy # Đợi DB khỏe mới chạy
+        condition: service_healthy
       rabbitmq:
-        condition: service_healthy # Đợi RabbitMQ khỏe mới chạy
+        condition: service_healthy
     networks:
       - aura-network
 
-  # 3. MEDICAL RECORD SERVICE
+  # 4. MEDICAL RECORD SERVICE
   medical-record-service:
     container_name: medical-record-service
     build:
@@ -72,8 +72,6 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_medical_db;Username=admin;Password=zxc123456
       - RabbitMQ__Host=rabbitmq
-      - RabbitMQ__Username=guest
-      - RabbitMQ__Password=guest
     ports:
       - "5002:8080"
     depends_on:
@@ -84,7 +82,7 @@ services:
     networks:
       - aura-network
 
-  # 4. IMAGING SERVICE
+  # 5. IMAGING SERVICE
   imaging-service:
     container_name: imaging-service
     restart: always
@@ -95,8 +93,6 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_imaging_db;Username=admin;Password=zxc123456
       - RabbitMQ__Host=rabbitmq
-      - RabbitMQ__Username=guest
-      - RabbitMQ__Password=guest
     ports:
       - "5003:8080"
     volumes:
@@ -109,7 +105,7 @@ services:
     networks:
       - aura-network
 
-  # 5. BILLING SERVICE
+  # 6. BILLING SERVICE
   billing-service:
     container_name: billing-service
     build:
@@ -129,7 +125,7 @@ services:
     networks:
       - aura-network
 
-  # 6. NOTIFICATION SERVICE
+  # 7. NOTIFICATION SERVICE
   notification-service:
     container_name: notification-service
     build:
@@ -146,7 +142,7 @@ services:
     networks:
       - aura-network
 
-  # 7. AI CORE SERVICE
+  # 8. AI CORE SERVICE
   ai-core-service:
     container_name: ai-core-service
     restart: always
@@ -161,7 +157,19 @@ services:
     networks:
       - aura-network
 
-  # 8. API GATEWAY (NGINX)
+  # 9. FRONTEND (React)
+  frontend:
+    container_name: aura-frontend
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    restart: always
+    networks:
+      - aura-network
+
+  # 10. API GATEWAY (Nginx)
   gateway:
     image: nginx:latest
     container_name: aura-gateway
@@ -175,28 +183,8 @@ services:
       - medical-record-service
       - imaging-service
       - billing-service
-    networks:
-      - aura-network
-
-  # 10. FRONTEND (React)
-  frontend:
-    container_name: aura-frontend
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    volumes:
-      - ../frontend:/app
-      - /app/node_modules
-    environment:
-      - WATCHPACK_POLLING=true
-      - CHOKIDAR_USEPOLLING=true
-      - REACT_APP_API_URL=http://localhost/api
-      - WDS_SOCKET_PORT=0
-      - DANGEROUSLY_DISABLE_HOST_CHECK=true
-    command: npm start
-    restart: always
+      - notification-service
+      - ai-core-service
     networks:
       - aura-network
 

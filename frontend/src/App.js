@@ -6,7 +6,7 @@ import AppRoutes from './routes/AppRoutes';
 import './App.css';
 
 function App() {
-  // Client ID của bạn
+  // Client ID Google của dự án AURA
   const GOOGLE_CLIENT_ID = "738290642667-5ijkcle6dmrk4rboc9i7djnombohemcv.apps.googleusercontent.com";
 
   return (

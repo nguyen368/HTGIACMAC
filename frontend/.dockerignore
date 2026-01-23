@@ -1,6 +1,8 @@
-node_modules
-build
-dist
-.git
+node_modules/
+build/
+dist/
+.git/
 .gitignore
 Dockerfile
+**/.vscode/
+npm-debug.log*

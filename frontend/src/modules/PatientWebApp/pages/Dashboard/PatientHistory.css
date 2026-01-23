@@ -1,0 +1,118 @@
+.history-container {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 20px;
+}
+
+.history-header {
+    margin-bottom: 30px;
+    border-left: 5px solid #3498db;
+    padding-left: 15px;
+}
+
+.history-header h3 {
+    font-size: 1.6rem;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.history-header p {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+}
+
+/* Danh sách Card */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.history-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border: 1px solid #edf2f7;
+    transition: transform 0.2s;
+}
+
+.history-card:hover {
+    transform: translateY(-3px);
+}
+
+.card-main-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.exam-date .value {
+    font-weight: 700;
+    color: #2d3748;
+    margin-left: 5px;
+}
+
+/* Badge màu sắc theo AI chẩn đoán */
+.diagnosis-badge {
+    padding: 6px 15px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+.status-normal { background: #d4edda; color: #155724; }
+.status-mild { background: #fff3cd; color: #856404; }
+.status-moderate { background: #ffeeba; color: #856404; }
+.status-severe { background: #f8d7da; color: #721c24; }
+.status-unknown { background: #e2e8f0; color: #4a5568; }
+
+.card-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.detail-item .label {
+    font-size: 0.85rem;
+    color: #718096;
+    display: block;
+}
+
+.detail-item .value {
+    font-weight: 500;
+    color: #2d3748;
+}
+
+.card-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.view-report-btn, .download-btn {
+    padding: 8px 15px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border: none;
+    transition: 0.2s;
+}
+
+.view-report-btn { background: #3498db; color: white; }
+.view-report-btn:hover { background: #2980b9; }
+
+.download-btn { background: #edf2f7; color: #4a5568; }
+.download-btn:hover { background: #e2e8f0; }
+
+.no-data {
+    text-align: center;
+    padding: 50px;
+    color: #a0aec0;
+}
+
+.no-data i { font-size: 3rem; margin-bottom: 10px; }
