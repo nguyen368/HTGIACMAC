@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; 
+import { jwtDecode } from "jwt-decode"; // [FIX] Thêm dấu ngoặc nhọn {}
 import AuthPage from '../modules/PatientWebApp/pages/Auth/AuthPage';
 import PatientLayout from '../modules/PatientWebApp/pages/Dashboard/PatientLayout';
 import PatientHome from '../modules/PatientWebApp/pages/Dashboard/PatientHome';
@@ -16,10 +16,10 @@ import DoctorWorkstation from '../modules/ClinicWebApp/pages/components/DoctorWo
 // Component bảo vệ Route (Giữ nguyên)
 const ProtectedRoute = ({ children, allowedRoles }) => {
     const token = localStorage.getItem('token');
-    if (!token) return <Navigate to="/login" replace />;
+    if (!token) return <Navigate to="/auth" replace />;
 
     try {
-        const decoded = jwtDecode(token);
+        const decoded = jwtDecode(token); // Sử dụng hàm đã import
         const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
         const userRole = (decoded[roleKey] || decoded.role || '').toLowerCase();
         
@@ -27,12 +27,13 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         const normalizedAllowedRoles = allowedRoles.map(r => r.toLowerCase());
 
         if (allowedRoles && !normalizedAllowedRoles.includes(userRole)) {
-            return <Navigate to="/login" replace />; 
+            // Nếu sai role, đá về trang login
+            return <Navigate to="/auth" replace />; 
         }
         return children;
     } catch (error) {
         localStorage.removeItem('token');
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/auth" replace />;
     }
 };
 
@@ -42,8 +43,27 @@ const AppRoutes = () => {
       {/* 1. Mặc định vào trang đăng nhập */}
       <Route path="/" element={<Navigate to="/auth" replace />} />
       <Route path="/auth" element={<AuthPage />} />
+      {/* Redirect /login về /auth để tránh lỗi đường dẫn cũ */}
+      <Route path="/login" element={<Navigate to="/auth" replace />} />
 
-            {/* 1. Route cho BÁC SĨ (Doctor) */}
+            {/* 2. Route cho BÁC SĨ (Doctor) - Sử dụng Layout của Clinic */}
+            <Route 
+                path="/clinic" 
+                element={
+                    <ProtectedRoute allowedRoles={['Doctor', 'ClinicAdmin']}>
+                        <ClinicLayout />
+                    </ProtectedRoute>
+                } 
+            >
+                {/* Mặc định vào Dashboard */}
+                <Route index element={<ClinicDashboard />} />
+                <Route path="dashboard" element={<ClinicDashboard />} />
+                
+                {/* Route trạm làm việc của bác sĩ */}
+                <Route path="doctor-workstation" element={<DoctorWorkstation />} />
+            </Route>
+
+            {/* Giữ lại route cũ /doctor nếu muốn truy cập nhanh (Optional) */}
             <Route 
                 path="/doctor" 
                 element={
@@ -53,17 +73,23 @@ const AppRoutes = () => {
                 } 
             />
 
-            {/* 2. Route cho BỆNH NHÂN (Patient) */}
+            {/* 3. Route cho BỆNH NHÂN (Patient) */}
             <Route 
-                path="/patient/dashboard" 
+                path="/patient" 
                 element={
                     <ProtectedRoute allowedRoles={['Patient']}>
                         <PatientLayout />
                     </ProtectedRoute>
                 } 
-            />
+            >
+                <Route index element={<Navigate to="/patient/dashboard" replace />} />
+                <Route path="dashboard" element={<PatientHome />} />
+                <Route path="profile" element={<PatientProfile />} />
+                <Route path="history" element={<PatientHistory />} />
+                <Route path="upload" element={<PatientUpload />} />
+            </Route>
 
-            {/* 3. Route cho ADMIN (Thay cho Clinic) */}
+            {/* 4. Route cho ADMIN */}
             <Route 
                 path="/admin" 
                 element={
@@ -77,7 +103,8 @@ const AppRoutes = () => {
                 } 
             />
 
-            <Route path="*" element={<div>404 Not Found</div>} />
+            {/* Route 404 */}
+            <Route path="*" element={<div style={{textAlign: 'center', marginTop: '50px'}}><h1>404 - Page Not Found</h1></div>} />
         </Routes>
     );
 };

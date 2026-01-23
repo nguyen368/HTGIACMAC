@@ -7,11 +7,10 @@ using Microsoft.EntityFrameworkCore;
 using System.IO.Compression;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json; 
-using MassTransit; // THÊM THƯ VIỆN NÀY
+using MassTransit;
 
 namespace AURA.Services.Imaging.API.Controllers;
 
-// Định nghĩa cấu trúc tin nhắn để RabbitMQ hiểu
 public record ImageUploadedEvent(Guid ImageId, string ImageUrl, Guid PatientId, Guid ClinicId);
 
 [ApiController]
@@ -21,14 +20,14 @@ public class ImagesController : ControllerBase
     private readonly IImageUploader _uploader;
     private readonly ImagingDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IPublishEndpoint _publishEndpoint; // THÊM IPublishEndpoint
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public ImagesController(IImageUploader uploader, ImagingDbContext context, IHttpClientFactory httpClientFactory, IPublishEndpoint publishEndpoint)
     {
         _uploader = uploader;
         _context = context;
         _httpClientFactory = httpClientFactory;
-        _publishEndpoint = publishEndpoint; // Gán vào biến
+        _publishEndpoint = publishEndpoint;
     }
 
     private class AiDiagnosisResponse {
@@ -43,10 +42,16 @@ public class ImagesController : ControllerBase
     private async Task<AiDiagnosisResponse?> CallAiDiagnosis(string fileName, string imageUrl) {
         try {
             var client = _httpClientFactory.CreateClient();
-            string aiUrl = "http://localhost:5006/api/ai/auto-diagnosis"; 
+            // Gọi qua tên service trong mạng Docker
+            string aiUrl = "http://ai-core-service:8000/api/ai/auto-diagnosis"; 
+            // Thiết lập timeout dài hơn (60s) vì AI quét ảnh tốn thời gian
+            client.Timeout = TimeSpan.FromSeconds(60);
             var response = await client.PostAsJsonAsync(aiUrl, new { file_name = fileName, image_url = imageUrl });
             return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<AiDiagnosisResponse>() : null;
-        } catch { return null; }
+        } catch (Exception ex) {
+            Console.WriteLine($"--> [Imaging] Lỗi gọi AI: {ex.Message}");
+            return null;
+        }        
     }
 
     [HttpPost("upload")]
@@ -54,23 +59,32 @@ public class ImagesController : ControllerBase
     {
         if (request.File == null || request.File.Length == 0) return BadRequest("File rỗng");
         try {
+            // 1. Upload ảnh lên Cloud (Cloudinary)
             var result = await _uploader.UploadAsync(request.File);
+            
+            // 2. Gọi AI để kiểm định ngay lập tức
+            var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
+
+            // 3. XỬ LÝ NẾU AI TỪ CHỐI (Ảnh mặt người, phong cảnh...)
+            if (aiResult != null && aiResult.Status == "Rejected") {
+                return BadRequest(new { 
+                    Status = "Rejected",
+                    Message = aiResult.Diagnosis, // Thông báo từ AI cực kỳ khó tính
+                    Url = result.Url 
+                });
+            }
+
+            // 4. CHỈ LƯU VÀO DB NẾU LÀ VÕNG MẠC THẬT
             var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
             _context.Images.Add(image);
             await _context.SaveChangesAsync();
 
-            // 1. Vẫn giữ logic gọi AI trực tiếp nếu bạn muốn (Code cũ)
-            var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
-            
-            // 2. NHƯNG THÊM DÒNG NÀY ĐỂ RABBITMQ NHẢY SỐ (Xử lý bất đồng bộ)
             await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, result.Url, request.PatientId, request.ClinicId));
 
-            string finalStatus = (aiResult != null && aiResult.Status == "Rejected") ? "Rejected" : "Success";
-
             return Ok(new { 
-                Message = finalStatus == "Rejected" ? "Ảnh bị từ chối" : "Upload thành công và đã gửi tin nhắn xử lý", 
+                Message = "Sàng lọc hoàn tất thành công", 
                 Details = new[] { new { 
-                    FileName = request.File.FileName, Status = finalStatus, Url = result.Url, Id = image.Id, AiDiagnosis = aiResult 
+                    FileName = request.File.FileName, Status = "Success", Url = result.Url, Id = image.Id, AiDiagnosis = aiResult 
                 }}
             });
         } catch (Exception ex) { return StatusCode(500, ex.Message); }
@@ -99,21 +113,23 @@ public class ImagesController : ControllerBase
                         memoryStream.Position = 0;
                         var uploadRes = await _uploader.UploadStreamAsync(memoryStream, entry.Name);
                         if (!string.IsNullOrEmpty(uploadRes.Url)) {
-                            var image = new ImageMetadata(patientId, clinicId, uploadRes.Url, uploadRes.PublicId);
-                            _context.Images.Add(image);
-                            await _context.SaveChangesAsync(); // Lưu để lấy ID
-                            
-                            // BẮN TIN NHẮN CHO TỪNG ẢNH TRONG LÔ (Batch Processing)
-                            await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, uploadRes.Url, patientId, clinicId));
-
-                            results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadRes.Url }); 
-                            successCount++;
+                            var aiCheck = await CallAiDiagnosis(entry.Name, uploadRes.Url);
+                            if (aiCheck != null && aiCheck.Status == "Success") {
+                                var image = new ImageMetadata(patientId, clinicId, uploadRes.Url, uploadRes.PublicId);
+                                _context.Images.Add(image);
+                                await _context.SaveChangesAsync(); 
+                                await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, uploadRes.Url, patientId, clinicId));
+                                results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadRes.Url }); 
+                                successCount++;
+                            } else {
+                                results.Add(new { FileName = entry.Name, Status = "Rejected", Message = "Ảnh không đạt chuẩn võng mạc" });
+                            }
                         }
                     }
                 } catch { }
             }
         }
-        return Ok(new { Message = $"Hoàn tất: {successCount} ảnh đã được đưa vào hàng chờ RabbitMQ", Details = results });
+        return Ok(new { Message = $"Hoàn tất xử lý lô: {successCount} ảnh hợp lệ", Details = results });
     }
 
     [HttpGet("stats/{clinicId}")]

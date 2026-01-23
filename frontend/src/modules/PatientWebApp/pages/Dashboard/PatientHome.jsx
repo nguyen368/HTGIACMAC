@@ -138,7 +138,7 @@ const PatientHome = ({ user, setTab }) => {
                     <div className="form-body" style={{display: 'flex', gap: '20px', flexWrap: 'wrap'}}>
                         <div style={{flex: 1, minWidth: '250px', background: '#f1f5f9', padding: '16px', borderRadius: '12px'}}>
                             <h4 style={{marginBottom: '8px', color: '#334155'}}>Kiểm soát đường huyết</h4>
-                            {/* ĐÃ SỬA LỖI CÚ PHÁP JSX: < 7% -> &lt; 7% */}
+                            {/* JSX safe code */}
                             <p style={{fontSize: '13px', color: '#64748b'}}>
                                 Giữ chỉ số HbA1c ở mức an toàn (&lt; 7%) để giảm nguy cơ biến chứng võng mạc.
                             </p>

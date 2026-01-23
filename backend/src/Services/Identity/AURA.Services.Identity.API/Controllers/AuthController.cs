@@ -3,11 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using AURA.Services.Identity.Application.Users.Commands.RegisterUser;
 using AURA.Services.Identity.Application.Users.Queries.Login;
 using AURA.Services.Identity.Application.Users.Queries.GetPatients; 
-using AURA.Services.Identity.Infrastructure.Data; // Thêm dòng này
-using AURA.Services.Identity.Domain.Entities;   // Thêm dòng này
-using AURA.Services.Identity.API.DTOs;          // Thêm dòng này
-using Microsoft.AspNetCore.Authorization;       // Thêm dòng này
-using Microsoft.EntityFrameworkCore;           // Thêm dòng này
+using AURA.Services.Identity.Infrastructure.Data;
+using AURA.Services.Identity.Domain.Entities;
+using AURA.Services.Identity.API.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 
 namespace AURA.Services.Identity.API.Controllers;
 
@@ -16,7 +16,7 @@ namespace AURA.Services.Identity.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly ISender _sender;
-    private readonly AppIdentityDbContext _context; // Logic nước rút: Dùng trực tiếp DB Context
+    private readonly AppIdentityDbContext _context;
 
     public AuthController(ISender sender, AppIdentityDbContext context)
     {
@@ -25,34 +25,29 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register(RegisterUserCommand command)
+    public async Task<IActionResult> Register([FromBody] RegisterUserCommand command)
     {
         var result = await _sender.Send(command);
         return result.IsSuccess ? Ok(result) : BadRequest(result.Error);
     }
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login(LoginQuery query)
+    public async Task<IActionResult> Login([FromBody] LoginQuery query)
     {
         var result = await _sender.Send(query);
         return result.IsSuccess ? Ok(result) : Unauthorized(result.Error);
     }
 
-    // --- LOGIC MỚI: ĐĂNG KÝ ĐỐI TÁC (PHÒNG KHÁM) ---
     [HttpPost("register-partner")]
     public async Task<IActionResult> RegisterPartner([FromBody] RegisterPartnerDto dto)
     {
-        // Sử dụng Transaction để đảm bảo tính toàn vẹn (tạo cả 2 hoặc không gì cả)
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            // 1. Tạo Phòng khám (Clinic)
             var clinic = new Clinic(dto.ClinicName, dto.ClinicAddress, dto.LicenseUrl);
             _context.Clinics.Add(clinic);
             await _context.SaveChangesAsync();
 
-            // 2. Tạo User Admin cho phòng khám
-            // Ghi chú: Sử dụng BCrypt để hash mật khẩu (Cần cài package BCrypt.Net-Next nếu chưa có)
             var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
             
             var user = new User(
@@ -62,7 +57,7 @@ public class AuthController : ControllerBase
                 dto.Email,
                 dto.FullName,
                 "ClinicAdmin",
-                clinic.Id // Gắn Id của phòng khám vừa tạo
+                clinic.Id
             );
 
             _context.Users.Add(user);
@@ -78,12 +73,10 @@ public class AuthController : ControllerBase
         }
     }
 
-    // --- LOGIC MỚI: CLINIC ADMIN TẠO BÁC SĨ ---
     [Authorize(Roles = "ClinicAdmin")]
     [HttpPost("create-doctor")]
     public async Task<IActionResult> CreateDoctor([FromBody] CreateDoctorDto dto)
     {
-        // Lấy ClinicId từ Claims của Token (Admin đang đăng nhập)
         var clinicIdClaim = User.FindFirst("ClinicId")?.Value;
         if (string.IsNullOrEmpty(clinicIdClaim)) 
             return Unauthorized("Không tìm thấy thông tin phòng khám của Admin.");

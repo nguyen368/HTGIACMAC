@@ -1,21 +1,29 @@
-// frontend/src/api/axiosClient.js
-import axios from 'axios';
+import axios from "axios";
 
 const axiosClient = axios.create({
-    // baseURL chỉ dừng ở /api
-    baseURL: 'http://localhost/api', 
-    headers: {
-        'Content-Type': 'application/json',
-    },
+  // BẮT BUỘC có dấu / ở cuối để làm gốc nối chính xác
+  baseURL: "http://localhost/api/", 
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// Thêm interceptors nếu cần (để đính kèm Token JWT)
+// Tự động gắn Token vào Header
 axiosClient.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
+  const token = localStorage.getItem('aura_token') || localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
+
+// Trả về data trực tiếp
+axiosClient.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    console.error("[AxiosClient] API Error:", error.response?.status, error.config?.url);
+    throw error;
+  }
+);
 
 export default axiosClient;

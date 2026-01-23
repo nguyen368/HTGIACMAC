@@ -110,7 +110,7 @@ services:
     networks:
       - aura-network
 
-  # 8. API GATEWAY
+  # 8. API GATEWAY (Backend Gateway - Nginx)
   gateway:
     image: nginx:latest
     container_name: aura-gateway
@@ -139,6 +139,19 @@ services:
       - RABBITMQ_DEFAULT_PASS=guest
     networks:
       - aura-network
+
+  # 10. FRONTEND WEB (Client Web)
+  client-web:
+    container_name: aura-frontend
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80" # Map port 80 của Nginx (trong container) ra port 3000 của máy thật
+    networks:
+      - aura-network
+    depends_on:
+      - gateway # Frontend chờ Backend Gateway khởi động xong
 
 networks:
   aura-network:

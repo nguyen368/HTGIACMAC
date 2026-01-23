@@ -1,23 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-// import jwtDecode from "jwt-decode";  <-- ĐÃ XÓA DÒNG NÀY ĐỂ KHỎI BỊ LỖI
+import { jwtDecode } from "jwt-decode"; 
 import authApi from '../../../../api/authApi';
 import './AuthPage.css';
 import { useAuth } from '../../../../context/AuthContext';
-
-// --- HÀM GIẢI MÃ TOKEN THỦ CÔNG (KHÔNG CẦN THƯ VIỆN) ---
-const parseJwt = (token) => {
-    try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        return JSON.parse(jsonPayload);
-    } catch (e) {
-        return null;
-    }
-};
 
 const AuthPage = () => {
     const navigate = useNavigate();
@@ -26,14 +12,11 @@ const AuthPage = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [showForgotPassword, setShowForgotPassword] = useState(false);
     
-    // State hiển thị mật khẩu
     const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [showRegPassword, setShowRegPassword] = useState(false);
 
-    // State dữ liệu Login
     const [loginData, setLoginData] = useState({ email: '', password: '', remember: false });
     
-    // State dữ liệu Register (Giữ nguyên cấu trúc của bạn)
     const [regData, setRegData] = useState({
         fullName: '',
         email: '',
@@ -43,36 +26,22 @@ const AuthPage = () => {
         terms: false
     });
 
-    // State kiểm tra độ mạnh mật khẩu
     const [passwordCriteria, setPasswordCriteria] = useState({
-        length: false,
-        case: false,
-        number: false,
-        special: false
+        length: false, case: false, number: false, special: false
     });
 
-    // --- LOGIC XỬ LÝ ---
+    // --- LOGIC XỬ LÝ DỮ LIỆU ---
 
     const handleLoginChange = (e) => {
         const { id, value, checked, type } = e.target;
-        setLoginData(prev => ({
-            ...prev,
-            [id]: type === 'checkbox' ? checked : value
-        }));
+        setLoginData(prev => ({ ...prev, [id]: type === 'checkbox' ? checked : value }));
     };
 
     const handleRegChange = (e) => {
         const { name, value, checked, type } = e.target;
         const fieldName = name || e.target.id; 
-        
-        setRegData(prev => ({
-            ...prev,
-            [fieldName]: type === 'checkbox' ? checked : value
-        }));
-
-        if (fieldName === 'password') {
-            validatePassword(value);
-        }
+        setRegData(prev => ({ ...prev, [fieldName]: type === 'checkbox' ? checked : value }));
+        if (fieldName === 'password') validatePassword(value);
     };
 
     const validatePassword = (password) => {
@@ -84,66 +53,60 @@ const AuthPage = () => {
         });
     };
 
+    // --- XỬ LÝ ĐĂNG NHẬP ---
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
         if (!loginData.email || !loginData.password) {
             alert('Vui lòng nhập đầy đủ thông tin đăng nhập!');
             return;
         }
-
         setIsLoading(true);
         try {
-            const res = await authApi.login({
-                email: loginData.email,
-                password: loginData.password
+            // res ở đây đã là data nhờ Interceptor trong axiosClient
+            const res = await authApi.login({ 
+                email: loginData.email, 
+                password: loginData.password 
             });
 
-            const data = res.data.value || res.data;
+            // Backend có thể trả về Token trực tiếp hoặc bọc trong object .value
+            const data = res.value || res; 
             
             if (data?.token) {
-                // 1. Đồng bộ hóa Token với AuthContext (Sử dụng key thống nhất aura_token)
+                // Lưu token đồng bộ để Gateway (cổng 80) nhận diện được
                 localStorage.setItem('aura_token', data.token);
-
-                // 2. Cập nhật Context (Lưu user vào database trình duyệt)
+                localStorage.setItem('token', data.token);
+                
                 if (login) await login(data);
 
-                // 3. GIẢI MÃ TOKEN & ĐIỀU HƯỚNG
-                let userRole = '';
+                let userRole = 'patient';
                 try {
                     const decoded = jwtDecode(data.token);
-                    // Lấy Role: Ưu tiên key ngắn, dự phòng key dài của Microsoft
-                    userRole = decoded.role || 
+                    // Bóc tách Role từ JWT Claim tiêu chuẩn hoặc tùy chỉnh
+                    userRole = (decoded.role || 
                                decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
-                               'patient'; 
-                } catch (err) {
-                    console.warn("Lỗi decode token:", err);
-                    userRole = 'patient';
+                               'patient').toLowerCase();
+                } catch (err) { 
+                    console.warn("Lỗi giải mã Token:", err); 
                 }
                 
-                const role = String(userRole).toLowerCase();
-                console.log("👉 Đăng nhập thành công với Role:", role);
-
-                // 4. ĐIỀU HƯỚNG CHÍNH XÁC
-                if (role === 'admin' || role === 'administrator') {
-                    navigate('/admin/dashboard'); // Sửa lại đường dẫn cho đúng routing
-                } 
-                else if (role === 'doctor') {
-                    navigate('/clinic/dashboard'); // Sửa lại đường dẫn cho đúng routing
-                }
-                else {
-                    // Mặc định là Patient
-                    navigate('/patient/dashboard'); 
-                } 
+                // Điều hướng người dùng dựa trên phân quyền
+                if (userRole === 'admin' || userRole === 'administrator') navigate('/admin'); 
+                else if (userRole === 'doctor') navigate('/clinic/dashboard'); 
+                else navigate('/patient/dashboard'); 
             }
         } catch (error) {
-            console.error(error);
-            alert('Lỗi đăng nhập: ' + (error.response?.data?.detail || "Kiểm tra lại email/mật khẩu"));
-        } finally {
-            setIsLoading(false);
+            console.error("Auth Error:", error);
+            // Hiển thị thông báo lỗi chi tiết từ Gateway/Backend
+            const msg = error.response?.data?.detail || 
+                        error.response?.data?.errors?.[0] || 
+                        "Thông tin đăng nhập không chính xác hoặc lỗi hệ thống.";
+            alert('Lỗi đăng nhập: ' + msg);
+        } finally { 
+            setIsLoading(false); 
         }
     };
 
-    // 4. Xử lý Đăng ký (Sửa Logic gửi Role Admin)
+    // --- XỬ LÝ ĐĂNG KÝ ---
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
         const { fullName, email, password, confirmPassword, terms } = regData;
@@ -163,11 +126,7 @@ const AuthPage = () => {
 
         setIsLoading(true);
         try {
-            // [SỬA ĐỔI] Mapping Role Backend
-            let roleToSend = 'Patient';
-            if (accountType === 'Doctor') roleToSend = 'Doctor';
-            if (accountType === 'Admin') roleToSend = 'Admin'; // Gửi role Admin thay vì Clinic
-
+            // Gửi dữ liệu đăng ký qua Gateway (api/auth/register)
             await authApi.register({
                 username: email, 
                 email: email,
@@ -176,19 +135,19 @@ const AuthPage = () => {
                 role: 'Patient' 
             });
 
-            alert('Đăng ký thành công! Vui lòng đăng nhập.');
+            alert('Đăng ký thành công! Hệ thống đang chuyển về trang Đăng nhập.');
             setActiveTab('login');
         } catch (error) {
-            alert('Đăng ký thất bại: ' + (error.response?.data?.detail || "Email đã tồn tại hoặc lỗi hệ thống"));
-        } finally {
-            setIsLoading(false);
+            const msg = error.response?.data?.detail || "Email đã tồn tại hoặc lỗi kết nối Gateway";
+            alert('Đăng ký thất bại: ' + msg);
+        } finally { 
+            setIsLoading(false); 
         }
     };
 
     return (
         <div className="auth-page-wrapper">
             <div className="auth-page-container">
-                {/* Header - Giữ nguyên giao diện của bạn */}
                 <div className="auth-header">
                     <div className="auth-logo">
                         <div className="auth-logo-icon"></div>
@@ -200,22 +159,19 @@ const AuthPage = () => {
                     </div>
                 </div>
 
-                {/* Main Content */}
                 <div className="auth-main-content">
                     <div className="auth-card-container">
-                        {/* Welcome Section (Left) - GIỮ NGUYÊN */}
                         <div className="welcome-section">
                             <h2>Phát hiện sớm nguy cơ bệnh lý qua hình ảnh võng mạc</h2>
-                            <p>Hệ thống AURA sử dụng AI để phân tích mạch máu võng mạc, hỗ trợ bác sĩ trong việc phát hiện sớm các nguy cơ tim mạch, tiểu đường và đột quỵ.</p>
+                            <p>Hệ thống AURA sử dụng AI để phân tích mạch máu võng mạc...</p>
                             <ul className="features-list">
-                                <li><i className="fas fa-check-circle"></i> Phân tích hình ảnh võng mạc bằng AI tiên tiến</li>
-                                <li><i className="fas fa-check-circle"></i> Hỗ trợ quyết định lâm sàng cho bác sĩ</li>
-                                <li><i className="fas fa-check-circle"></i> Sàng lọc không xâm lấn, nhanh chóng</li>
-                                <li><i className="fas fa-check-circle"></i> Bảo mật dữ liệu y tế tuyệt đối</li>
+                                <li><i className="fas fa-check-circle"></i> Phân tích hình ảnh võng mạc bằng AI</li>
+                                <li><i className="fas fa-check-circle"></i> Hỗ trợ quyết định lâm sàng</li>
+                                <li><i className="fas fa-check-circle"></i> Sàng lọc không xâm lấn</li>
+                                <li><i className="fas fa-check-circle"></i> Bảo mật dữ liệu y tế</li>
                             </ul>
                         </div>
 
-                        {/* Auth Forms */}
                         <div className="auth-forms-section">
                             <div className="auth-tabs">
                                 <div className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`} onClick={() => setActiveTab('login')}>Đăng nhập</div>
@@ -258,31 +214,6 @@ const AuthPage = () => {
                             {activeTab === 'register' && (
                                 <form className="auth-form" onSubmit={handleRegisterSubmit}>
                                     <h3 className="auth-form-title">Tạo tài khoản mới</h3>
-                                    
-                                    <div className="form-group">
-                                        <label>Loại tài khoản</label>
-                                        <div className="account-type">
-                                            <input 
-                                                type="radio" id="patient" name="account-type" value="Patient"
-                                                checked={regData.accountType === 'Patient'} onChange={handleRegChange}
-                                            />
-                                            <label htmlFor="patient">Bệnh nhân</label>
-                                            
-                                            <input 
-                                                type="radio" id="doctor" name="account-type" value="Doctor"
-                                                checked={regData.accountType === 'Doctor'} onChange={handleRegChange}
-                                            />
-                                            <label htmlFor="doctor">Bác sĩ</label>
-                                            
-                                            {/* [SỬA ĐỔI] Thay Clinic thành Admin */}
-                                            <input 
-                                                type="radio" id="admin" name="account-type" value="Admin"
-                                                checked={regData.accountType === 'Admin'} onChange={handleRegChange}
-                                            />
-                                            <label htmlFor="admin">Admin</label>
-                                        </div>
-                                    </div>
-                                    
                                     <div className="form-group">
                                         <label>Họ và tên</label>
                                         <div className="input-with-icon">
@@ -308,13 +239,11 @@ const AuthPage = () => {
                                         <label>Mật khẩu</label>
                                         <div className="input-with-icon">
                                             <i className="fas fa-lock"></i>
-                                            <input type={showRegPassword ? "text" : "password"} name="password" placeholder="Nhập mật khẩu (tối thiểu 8 ký tự)" value={regData.password} onChange={handleRegChange} />
+                                            <input type={showRegPassword ? "text" : "password"} name="password" placeholder="Nhập mật khẩu" value={regData.password} onChange={handleRegChange} />
                                             <button type="button" className="password-toggle" onClick={() => setShowRegPassword(!showRegPassword)}>
                                                 <i className={`fas ${showRegPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                                             </button>
                                         </div>
-                                        
-                                        {/* Password Requirements Checklist - GIỮ NGUYÊN */}
                                         <div className="password-requirements">
                                             <div className={`requirement ${passwordCriteria.length ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.length ? 'fa-check-circle' : 'fa-circle'}`}></i> Tối thiểu 8 ký tự</div>
                                             <div className={`requirement ${passwordCriteria.case ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.case ? 'fa-check-circle' : 'fa-circle'}`}></i> Chứa chữ hoa và chữ thường</div>
@@ -339,35 +268,28 @@ const AuthPage = () => {
                         </div>
                     </div>
                 </div>
-
                 <div className="auth-footer">
-                    <p>© 2024 AURA Screening. Hệ thống sàng lọc sức khỏe mạch máu võng mạc.</p>
-                    <p>Phát triển bởi nhóm nghiên cứu SP26SE025</p>
+                    <p>© 2026 AURA Screening.</p>
                 </div>
             </div>
 
-            {/* Forgot Password Modal - GIỮ NGUYÊN */}
-            {showForgotPassword && (
-                <div className="auth-modal">
-                    <div className="auth-modal-content">
-                        <div className="auth-modal-header">
-                            <h3 className="auth-modal-title">Khôi phục mật khẩu</h3>
-                            <button className="close-modal-btn" onClick={() => setShowForgotPassword(false)}>&times;</button>
-                        </div>
-                        <p>Vui lòng nhập email đã đăng ký để nhận liên kết khôi phục mật khẩu:</p>
-                        <div className="form-group" style={{marginTop: '20px'}}>
-                            <div className="input-with-icon">
-                                <i className="fas fa-envelope"></i>
-                                <input type="email" placeholder="Nhập địa chỉ email" />
-                            </div>
-                        </div>
-                        <button className="auth-btn" style={{marginTop: '20px'}}>Gửi link khôi phục</button>
-                        <div style={{textAlign: 'center', marginTop: '20px'}}>
-                            <p>Hoặc</p>
-                            <button className="auth-btn" style={{backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ddd'}}>Xác thực bằng số điện thoại</button>
-                        </div>
-                    </div>
-                </div>
+            {showForgotPassword && ( 
+                <div className="auth-modal"> 
+                    <div className="auth-modal-content"> 
+                        <div className="auth-modal-header"> 
+                            <h3 className="auth-modal-title">Khôi phục mật khẩu</h3> 
+                            <button className="close-modal-btn" onClick={() => setShowForgotPassword(false)}>&times;</button> 
+                        </div> 
+                        <p>Vui lòng nhập email đã đăng ký:</p> 
+                        <div className="form-group" style={{marginTop: '20px'}}> 
+                            <div className="input-with-icon"> 
+                                <i className="fas fa-envelope"></i> 
+                                <input type="email" placeholder="Nhập địa chỉ email" /> 
+                            </div> 
+                        </div> 
+                        <button className="auth-btn" style={{marginTop: '20px'}}>Gửi link khôi phục</button> 
+                    </div> 
+                </div> 
             )}
         </div>
     );
