@@ -1,208 +1,204 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ImageOverlay from './ImageOverlay';
-import imagingApi from '../../../../api/imagingApi'; 
 import medicalApi from '../../../../api/medicalApi'; 
-import { useAuth } from '../../../../context/AuthContext'; // [MỚI] Import Auth Context
+import { useAuth } from '../../../../context/AuthContext'; 
 import './ClinicExamDetail.css';
 
 const ClinicExamDetail = () => {
-  const { imageId } = useParams();
+  const { id } = useParams(); // Lấy Examination ID từ URL
   const navigate = useNavigate();
-  const { user } = useAuth(); // [MỚI] Lấy thông tin user (Bác sĩ)
+  const { user } = useAuth(); 
 
   // State dữ liệu
-  const [imageData, setImageData] = useState(null);
+  const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // State Viewer
   const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [showHeatmap, setShowHeatmap] = useState(true); // Mặc định bật AI Heatmap
 
-  // State Form
+  // State Form Input
   const [diagnosis, setDiagnosis] = useState("");
-  const [note, setNote] = useState("");
+  const [notes, setNotes] = useState("");
 
-  // Load dữ liệu thật từ API
+  // Load dữ liệu từ Backend
   useEffect(() => {
-    const fetchFullData = async () => {
-      if (!imageId) return;
+    const fetchData = async () => {
       try {
         setLoading(true);
-
-        // Bước 1: Lấy thông tin ảnh từ Imaging Service
-        const imgRes = await imagingApi.getDetail(imageId);
+        // Gọi API lấy chi tiết (Bao gồm thông tin BN, Ảnh, Kết quả AI)
+        const data = await medicalApi.getExaminationDetail(id);
         
-        // Bước 2: Lấy thông tin bệnh nhân từ Medical Service
-        let patientInfo = { fullName: "Đang tải...", age: "?" };
-        // Kiểm tra cả 2 trường hợp viết hoa/thường do backend có thể trả về khác nhau
-        const patientId = imgRes.patientId || imgRes.PatientId;
-
-        if (patientId) {
-            try {
-                const pRes = await medicalApi.getPatientById(patientId);
-                if (pRes) {
-                    patientInfo = {
-                        fullName: pRes.fullName,
-                        age: pRes.dateOfBirth ? (new Date().getFullYear() - new Date(pRes.dateOfBirth).getFullYear()) : "??"
-                    };
-                }
-            } catch (err) {
-                console.warn("Không tải được thông tin bệnh nhân:", err);
-            }
+        setExam(data);
+        
+        // Điền sẵn dữ liệu nếu đã có (hoặc lấy từ AI gợi ý)
+        if (data.diagnosisResult) {
+            setDiagnosis(data.diagnosisResult); // Nếu bác sĩ đã lưu trước đó
+        } else if (data.aiDiagnosis) {
+            // Nếu chưa, gợi ý từ AI (nhưng không set cứng, để bác sĩ chọn)
+            // setDiagnosis(data.aiDiagnosis); 
         }
 
-        // Set dữ liệu hiển thị
-        setImageData({
-            id: imgRes.id,
-            url: imgRes.imageUrl,
-            patientId: patientId, // Lưu lại ID để dùng khi save
-            patientName: patientInfo.fullName,
-            age: patientInfo.age,
-            aiBbox: [150, 200, 100, 100], // Mock AI Bbox
-            aiPrediction: imgRes.aiPrediction || "Chưa có kết quả phân tích"
-        });
+        if (data.doctorNotes) setNotes(data.doctorNotes);
 
       } catch (error) {
         console.error("Lỗi tải dữ liệu:", error);
         alert("Không tìm thấy dữ liệu ca khám!");
+        navigate('/clinic/queue'); // Quay về danh sách chờ
       } finally {
         setLoading(false);
       }
     };
 
-    fetchFullData();
-  }, [imageId]);
+    if (id) fetchData();
+  }, [id, navigate]);
 
   // --- Handlers Viewer ---
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const scaleAdjustment = e.deltaY * -0.001;
-    const newScale = Math.min(Math.max(0.5, scale + scaleAdjustment), 4);
-    setScale(newScale);
-  };
+  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 3));
+  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
+  const handleResetZoom = () => setScale(1);
 
-  const handleMouseDown = (e) => {
-    setIsDragging(true);
-    setStartPos({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    setPosition({ x: e.clientX - startPos.x, y: e.clientY - startPos.y });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
-  // --- [QUAN TRỌNG] Handlers Form: LƯU THẬT VÀO DB ---
+  // --- Handlers Action ---
   const handleSave = async () => {
-    // 1. Validate dữ liệu
     if (!diagnosis) return alert("Vui lòng chọn kết luận bệnh!");
-    if (!imageData?.patientId) return alert("Thiếu thông tin bệnh nhân, không thể lưu!");
+
+    // Xác nhận nếu kết quả khác AI (CDS Logic)
+    if (exam.aiRiskLevel === 'High' && diagnosis === 'Bình thường') {
+        if (!window.confirm("⚠️ CẢNH BÁO AI:\nCa này có nguy cơ cao, bạn chắc chắn muốn kết luận 'Bình thường'?")) {
+            return;
+        }
+    }
 
     try {
         setLoading(true);
-
-        // 2. Chuẩn bị payload gửi đi
         const payload = {
-            patientId: imageData.patientId,
-            imageId: imageId,
-            diagnosis: diagnosis,
-            doctorNotes: note,
-            // Lấy ID bác sĩ từ token, nếu không có thì dùng default (hoặc báo lỗi)
-            doctorId: user?.id || "00000000-0000-0000-0000-000000000000" 
+            finalDiagnosis: diagnosis,
+            doctorNotes: notes,
+            doctorId: user?.id || "00000000-0000-0000-0000-000000000000"
         };
 
-        // 3. Gọi API Medical
-        await medicalApi.saveExamination(payload);
+        // Gọi API Verify
+        await medicalApi.verifyDiagnosis(id, payload);
 
-        // 4. Thông báo & Chuyển trang
-        alert("✅ Đã lưu kết quả vào hồ sơ bệnh án thành công!");
-        navigate('/clinic/upload'); 
+        alert("✅ Đã lưu kết quả & Gửi thông báo cho bệnh nhân!");
+        navigate('/clinic/queue'); 
 
     } catch (error) {
-        console.error("Lỗi khi lưu:", error);
-        // Hiển thị lỗi chi tiết từ Backend nếu có
-        const serverMsg = error.response?.data?.message || error.message;
-        alert(`❌ Lỗi: ${serverMsg}`);
+        console.error("Lỗi lưu:", error);
+        alert("Lỗi: " + (error.response?.data?.Error || error.message));
     } finally {
         setLoading(false);
     }
   };
 
+  const handlePrintReport = async () => {
+      try {
+          const report = await medicalApi.getReportData(id);
+          console.log("Report Data:", report);
+          alert(`🖨️ Đang in phiếu kết quả...\n(Traceability: ${report.technicalTraceability.systemName})`);
+          // Logic mở cửa sổ in PDF ở đây
+      } catch (err) {
+          alert("Không thể tải dữ liệu báo cáo.");
+      }
+  };
+
   if (loading) return <div className="loading-screen">Đang tải dữ liệu ca khám...</div>;
+  if (!exam) return null;
 
   return (
     <div className="exam-container">
-      {/* CỘT TRÁI: VIEWER */}
-      <div className="viewer-column" 
-           onWheel={handleWheel}
-           onMouseDown={handleMouseDown}
-           onMouseMove={handleMouseMove}
-           onMouseUp={handleMouseUp}
-           onMouseLeave={handleMouseUp}
-      >
-        <div className="image-wrapper" 
-             style={{ 
-               transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-               cursor: isDragging ? 'grabbing' : 'grab'
-             }}
-        >
-          {imageData?.url && <img src={imageData.url} alt="Medical Scan" className="main-image" />}
-          <ImageOverlay bbox={imageData?.aiBbox} />
+      {/* CỘT TRÁI: IMAGE VIEWER (CDS) */}
+      <div className="viewer-column">
+        <div className="toolbar">
+            <button onClick={handleZoomIn}><i className="fas fa-plus"></i></button>
+            <button onClick={handleResetZoom}>1:1</button>
+            <button onClick={handleZoomOut}><i className="fas fa-minus"></i></button>
+            <div className="vr mx-2"></div>
+            <div className="form-check form-switch d-inline-block">
+                <input 
+                    className="form-check-input" 
+                    type="checkbox" 
+                    checked={showHeatmap} 
+                    onChange={e => setShowHeatmap(e.target.checked)} 
+                    disabled={!exam.heatmapUrl}
+                />
+                <label className="form-check-label text-white ms-2">AI Heatmap</label>
+            </div>
         </div>
 
-        <div className="zoom-controls">
-            <button onClick={() => setScale(scale + 0.5)}><i className="fas fa-plus"></i></button>
-            <button onClick={() => setScale(1)}>1:1</button>
-            <button onClick={() => setScale(Math.max(0.5, scale - 0.5))}><i className="fas fa-minus"></i></button>
+        <div className="image-wrapper" style={{ transform: `scale(${scale})` }}>
+          {/* Layer 1: Ảnh gốc */}
+          <img src={exam.imageUrl} alt="Original" className="main-image" />
+          
+          {/* Layer 2: Heatmap (Đè lên) */}
+          {showHeatmap && exam.heatmapUrl && (
+            <img 
+                // URL trả về từ Backend là đường dẫn tương đối (/static/...), cần thêm domain API Gateway
+                src={`http://localhost:80${exam.heatmapUrl}`} 
+                alt="Heatmap" 
+                className="heatmap-overlay" 
+                style={{ opacity: 0.6, mixBlendMode: 'multiply' }}
+            />
+          )}
         </div>
       </div>
 
-      {/* CỘT PHẢI: FORM */}
+      {/* CỘT PHẢI: FORM CHẨN ĐOÁN */}
       <div className="form-column">
         <div className="patient-card">
-            <h3>Thông tin Bệnh nhân</h3>
-            <p><strong>Họ tên:</strong> {imageData?.patientName}</p>
-            <p><strong>Tuổi:</strong> {imageData?.age}</p>
-            <div className="ai-alert">
-                <i className="fas fa-robot"></i> <strong>AI Gợi ý:</strong><br/> 
-                {imageData?.aiPrediction}
+            <h3>Hồ sơ: {exam.patientName}</h3>
+            <p className="mb-1"><strong>Tuổi:</strong> {exam.age} | <strong>Giới tính:</strong> {exam.gender}</p>
+            <p className="text-muted"><small>Ngày chụp: {new Date(exam.examDate).toLocaleString()}</small></p>
+            
+            {/* AI Result Box */}
+            <div className={`ai-result-box ${exam.aiRiskLevel === 'High' ? 'danger' : 'safe'}`}>
+                <h5>🤖 Phân tích AI:</h5>
+                <p><strong>Đánh giá:</strong> {exam.aiDiagnosis || "Chưa có kết quả"}</p>
+                <p><strong>Mức độ:</strong> {exam.aiRiskLevel} (Score: {exam.aiRiskScore}%)</p>
             </div>
         </div>
 
         <div className="diagnosis-form">
-            <h3>Kết quả Chẩn đoán</h3>
             <div className="form-group">
-                <label>Kết luận bệnh:</label>
-                <select className="form-select" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)}>
+                <label className="fw-bold">Kết luận chuyên môn:</label>
+                <select className="form-select" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} disabled={exam.status === 'Verified'}>
                     <option value="">-- Chọn chẩn đoán --</option>
                     <option value="Bình thường">Bình thường</option>
-                    <option value="Viêm loét giác mạc">Viêm loét giác mạc</option>
-                    <option value="Sẹo giác mạc">Sẹo giác mạc</option>
+                    <option value="Võng mạc tiểu đường (DR)">Võng mạc tiểu đường (DR)</option>
+                    <option value="Thoái hóa điểm vàng (AMD)">Thoái hóa điểm vàng (AMD)</option>
+                    <option value="Tăng nhãn áp (Glaucoma)">Tăng nhãn áp (Glaucoma)</option>
+                    <option value="Đục thủy tinh thể">Đục thủy tinh thể</option>
                     <option value="Khác">Khác</option>
                 </select>
             </div>
             
-            <div className="form-group">
-                <label>Ghi chú bác sĩ:</label>
+            <div className="form-group mt-3">
+                <label className="fw-bold">Ghi chú / Y lệnh:</label>
                 <textarea 
-                    rows="5" 
-                    className="form-textarea"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Nhập chi tiết tình trạng..."
+                    className="form-control"
+                    rows="4"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Nhập ghi chú chi tiết..."
+                    disabled={exam.status === 'Verified'}
                 ></textarea>
             </div>
 
-            <button className="btn-save" onClick={handleSave} disabled={loading}>
-                {loading ? "Đang lưu..." : <><i className="fas fa-save"></i> Lưu Kết Quả</>}
-            </button>
-            <button className="btn-back" onClick={() => navigate('/clinic/upload')}>
-                Quay lại
-            </button>
+            <div className="action-buttons mt-4">
+                {exam.status !== 'Verified' ? (
+                    <button className="btn-save w-100 mb-2" onClick={handleSave} disabled={loading}>
+                        <i className="fas fa-check-circle"></i> Xác nhận & Hoàn tất
+                    </button>
+                ) : (
+                    <div className="alert alert-success text-center">
+                        <i className="fas fa-lock"></i> Hồ sơ đã được duyệt
+                    </div>
+                )}
+                
+                <button className="btn-print w-100" onClick={handlePrintReport}>
+                    <i className="fas fa-print"></i> In Phiếu Kết Quả
+                </button>
+            </div>
         </div>
       </div>
     </div>

@@ -1,21 +1,24 @@
-// frontend/src/api/axiosClient.js
 import axios from 'axios';
 
 const axiosClient = axios.create({
-    // baseURL chỉ dừng ở /api
-    baseURL: 'http://localhost/api', 
-    headers: {
-        'Content-Type': 'application/json',
-    },
+  // URL của API Gateway (Ocelot) để điều hướng đến các Microservices
+  baseURL: 'http://localhost:8000/api', 
+  headers: { 
+    'Content-Type': 'application/json' 
+  },
 });
 
-// Thêm interceptors nếu cần (để đính kèm Token JWT)
-axiosClient.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
+// Xử lý dữ liệu trả về tự động để không phải gọi .data nhiều lần ở tầng giao diện
+axiosClient.interceptors.response.use(
+  (response) => {
+    // Nếu API trả về dữ liệu, lấy trực tiếp phần body
+    return response.data;
+  },
+  (error) => {
+    // Xử lý lỗi tập trung nếu cần (ví dụ: mất kết nối, token hết hạn)
+    console.error('API Error:', error.response ? error.response.data : error.message);
+    return Promise.reject(error);
+  }
+);
 
 export default axiosClient;

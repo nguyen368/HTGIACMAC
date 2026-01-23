@@ -1,0 +1,63 @@
+{
+  "Routes": [
+    {
+      "DownstreamPathTemplate": "/api/imaging/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "imaging-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/imaging/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "DELETE" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/hardware/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "imaging-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/hardware/{everything}",
+      "UpstreamHttpMethod": [ "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/medical-records/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "medical-record-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/medical-records/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/data-sync/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "medical-record-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/data-sync/{everything}",
+      "UpstreamHttpMethod": [ "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/auth/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "identity-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/auth/{everything}",
+      "UpstreamHttpMethod": [ "POST", "GET", "PUT" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/admin/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "identity-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/admin/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/billing/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "billing-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/billing/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST" ]
+    },
+    {
+      "DownstreamPathTemplate": "/hubs/notifications",
+      "DownstreamScheme": "ws",
+      "DownstreamHostAndPorts": [ { "Host": "notification-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/hubs/notifications",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ]
+    }
+  ],
+  "GlobalConfiguration": {
+    "BaseUrl": "http://localhost"
+  }
+}

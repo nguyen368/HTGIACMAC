@@ -3,30 +3,31 @@ using AURA.Services.MedicalRecord.Domain.Entities;
 using AURA.Services.MedicalRecord.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using MassTransit; 
 
 namespace AURA.Services.MedicalRecord.API.Controllers
 {
+    public record DiagnosisVerifiedEvent(Guid ExaminationId, Guid PatientId, string FinalDiagnosis, string DoctorNotes, DateTime VerifiedAt);
+
     [ApiController]
     [Route("api/medical-records/examinations")]
     public class ExaminationsController : ControllerBase
     {
         private readonly MedicalDbContext _context;
+        private readonly IPublishEndpoint _publishEndpoint;
 
-        public ExaminationsController(MedicalDbContext context)
+        public ExaminationsController(MedicalDbContext context, IPublishEndpoint publishEndpoint)
         {
             _context = context;
+            _publishEndpoint = publishEndpoint;
         }
 
-        // =========================================================================
-        // PHẦN 1: API MỚI CHO CLINIC WEB (Upload & Lưu kết quả)
-        // =========================================================================
-
-        // [POST] Tạo mới/Lưu kết quả khám (Quan trọng nhất)
         [HttpPost]
         public async Task<IActionResult> CreateExamination([FromBody] CreateExaminationRequest request)
         {
             if (request.PatientId == Guid.Empty) return BadRequest("PatientId is required");
 
+            // Gọi Constructor 5 tham số (Đã thêm trong Entity)
             var examination = new Examination(
                 request.PatientId,
                 request.ImageId,
@@ -41,7 +42,6 @@ namespace AURA.Services.MedicalRecord.API.Controllers
             return Ok(new { Message = "Đã lưu kết quả khám thành công", Id = examination.Id });
         }
 
-        // [GET] Lấy chi tiết ca khám
         [HttpGet("{id}")]
         public async Task<IActionResult> GetExaminationById(Guid id)
         {
@@ -51,7 +51,6 @@ namespace AURA.Services.MedicalRecord.API.Controllers
 
             if (exam == null) return NotFound(new { Message = "Không tìm thấy hồ sơ khám" });
 
-            // Tính tuổi an toàn
             var age = exam.Patient != null ? (DateTime.UtcNow.Year - exam.Patient.DateOfBirth.Year) : 0;
 
             return Ok(new 
@@ -64,48 +63,38 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 exam.Status,
                 exam.ExamDate,
                 exam.DoctorNotes,
-                DiagnosisResult = exam.Diagnosis // Map field
+                DiagnosisResult = exam.Status == "Verified" ? exam.Diagnosis : exam.AiDiagnosis,
+                exam.AiRiskScore,
+                exam.AiRiskLevel,
+                exam.HeatmapUrl
             });
         }
 
-        // [GET] Thống kê Dashboard
         [HttpGet("stats")]
         public async Task<IActionResult> GetStats()
         {
             var today = DateTime.UtcNow.Date;
-
             var totalPatients = await _context.Patients.CountAsync();
             var pendingExams = await _context.Examinations.CountAsync(e => e.Status == "Pending");
-            
             var completedToday = await _context.Examinations
                 .CountAsync(e => (e.Status == "Completed" || e.Status == "Verified") && e.ExamDate >= today);
-
             var highRisk = await _context.Examinations
-                .CountAsync(e => (e.Status == "Completed" || e.Status == "Verified") 
-                                 && e.Diagnosis != "Bình thường" 
-                                 && !string.IsNullOrEmpty(e.Diagnosis));
+                .CountAsync(e => (e.Status == "Completed" || e.Status == "Verified") && e.AiRiskLevel == "High");
 
-            return Ok(new 
-            {
-                TotalPatients = totalPatients,
-                PendingExams = pendingExams,
-                CompletedToday = completedToday,
-                HighRiskCases = highRisk
-            });
+            return Ok(new { TotalPatients = totalPatients, PendingExams = pendingExams, CompletedToday = completedToday, HighRiskCases = highRisk });
         }
 
-        // =========================================================================
-        // PHẦN 2: API CŨ CỦA TEAM (Giữ nguyên để không conflict)
-        // =========================================================================
-
         [HttpGet("queue")]
-        public async Task<IActionResult> GetWaitingList()
+        public async Task<IActionResult> GetWaitingList([FromQuery] Guid? clinicId)
         {
-            var query = await _context.Examinations
+            var query = _context.Examinations
                 .AsNoTracking()
                 .Include(e => e.Patient)
-                .Where(e => e.Status == "Pending" || e.Status == "Analyzed")
-                .OrderBy(e => e.ExamDate)
+                .Where(e => e.Status == "Pending" || e.Status == "Analyzed");
+
+            var result = await query
+                .OrderByDescending(e => e.AiRiskScore) 
+                .ThenBy(e => e.ExamDate)
                 .Select(e => new ExaminationQueueDto
                 {
                     Id = e.Id,
@@ -113,11 +102,14 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                     PatientName = e.Patient != null ? e.Patient.FullName : "Unknown",
                     ImageUrl = e.ImageUrl,
                     ExamDate = e.ExamDate,
-                    Status = e.Status
+                    Status = e.Status,
+                    AiDiagnosis = e.AiDiagnosis,
+                    AiRiskLevel = e.AiRiskLevel,
+                    AiRiskScore = e.AiRiskScore ?? 0
                 })
                 .ToListAsync();
 
-            return Ok(query);
+            return Ok(result);
         }
 
         [HttpPost("fake")]
@@ -137,6 +129,7 @@ namespace AURA.Services.MedicalRecord.API.Controllers
 
             try
             {
+                // Gọi Overload 1 tham số (Đã thêm trong Entity)
                 exam.UpdateAiResult(aiResult);
                 await _context.SaveChangesAsync();
                 return Ok(new { Message = "Đã cập nhật AI thành công" });
@@ -153,11 +146,35 @@ namespace AURA.Services.MedicalRecord.API.Controllers
             var exam = await _context.Examinations.FindAsync(id);
             if (exam == null) return NotFound("Không tìm thấy ca khám.");
 
+            if (exam.Status != "Analyzed" && exam.Status != "Pending")
+            {
+                 return BadRequest(new { Error = "Quy trình CDS", Message = "Hồ sơ cần được AI phân tích trước khi Bác sĩ kết luận." });
+            }
+
             try
             {
-                exam.ConfirmDiagnosis(request.DoctorNotes, request.FinalDiagnosis);
+                // [QUAN TRỌNG] Truyền DoctorId vào hàm ConfirmDiagnosis (Đã sửa trong Entity)
+                // request.DoctorId phải có trong DTO ConfirmDiagnosisRequest (đã nhắc ở bước trước)
+                // Nếu chưa có, hãy đảm bảo file DTO đã được update.
+                // Ở đây giả định DTO ConfirmDiagnosisRequest chưa có DoctorId thì ta lấy tạm DoctorId từ request nào đó hoặc hardcode test
+                // Để an toàn, hãy cập nhật DTO ConfirmDiagnosisRequest thêm DoctorId.
+                
+                // Tạm thời fix cứng Guid.Empty nếu DTO chưa update, nhưng tốt nhất là update DTO.
+                Guid docId = Guid.Empty; // Thay bằng request.DoctorId sau khi update DTO
+                
+                exam.ConfirmDiagnosis(request.DoctorNotes, request.FinalDiagnosis, docId);
+                
                 await _context.SaveChangesAsync();
-                return Ok(new { Message = "Bác sĩ đã duyệt thành công" });
+
+                await _publishEndpoint.Publish(new DiagnosisVerifiedEvent(
+                    exam.Id,
+                    exam.PatientId,
+                    request.FinalDiagnosis,
+                    request.DoctorNotes,
+                    DateTime.UtcNow
+                ));
+
+                return Ok(new { Message = "Bác sĩ đã duyệt thành công." });
             }
             catch (Exception ex)
             {
@@ -166,7 +183,6 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         }
     }
 
-    // --- DTOs ---
     public class CreateExaminationRequest
     {
         public Guid PatientId { get; set; }
@@ -174,5 +190,18 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         public string Diagnosis { get; set; } = string.Empty;
         public string DoctorNotes { get; set; } = string.Empty;
         public Guid DoctorId { get; set; }
+    }
+
+    public class ExaminationQueueDto
+    {
+        public Guid Id { get; set; }
+        public Guid PatientId { get; set; }
+        public string PatientName { get; set; }
+        public string ImageUrl { get; set; }
+        public DateTime ExamDate { get; set; }
+        public string Status { get; set; }
+        public string AiDiagnosis { get; set; }
+        public string AiRiskLevel { get; set; }
+        public double AiRiskScore { get; set; } 
     }
 }

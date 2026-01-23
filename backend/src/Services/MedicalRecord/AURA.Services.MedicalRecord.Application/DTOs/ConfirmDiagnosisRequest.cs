@@ -1,7 +1,9 @@
-namespace AURA.Services.MedicalRecord.Application.DTOs;
-
-public class ConfirmDiagnosisRequest
+namespace AURA.Services.MedicalRecord.Application.DTOs
 {
-    public string DoctorNotes { get; set; }
-    public string FinalDiagnosis { get; set; } // Kết luận cuối (có thể khác AI)
+    public class ConfirmDiagnosisRequest
+    {
+        public string DoctorNotes { get; set; } = string.Empty;
+        public string FinalDiagnosis { get; set; } = string.Empty;
+        public Guid DoctorId { get; set; } 
+    }
 }

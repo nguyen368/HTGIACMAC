@@ -1,8 +1,9 @@
 import axios from "axios";
 
-// 1. Tạo instance axios trỏ đến Port 5002 (Hoặc dùng "/api" nếu chạy qua Gateway)
+// 1. Tạo instance axios trỏ đến Gateway (Port 80)
+// Lưu ý: Tất cả request phải đi qua Gateway Ocelot
 const medicalClient = axios.create({
-  baseURL: "http://localhost:5002/api", 
+  baseURL: "http://localhost:80/api", 
   headers: {
     "Content-Type": "application/json",
   },
@@ -25,33 +26,36 @@ medicalClient.interceptors.response.use(
 
 // 4. Khai báo các hàm gọi API
 const medicalApi = {
-  getPatientProfile: () => {
-    return medicalClient.get("/patients/me");
-  },
+  // --- PATIENT APIs ---
+  getPatientProfile: () => medicalClient.get("/patients/me"),
+  updateProfile: (data) => medicalClient.put("/patients/me", data),
+  getExaminationHistory: () => medicalClient.get("/patients/examinations"),
+  addMedicalHistory: (patientId, data) => medicalClient.post(`/patients/${patientId}/history`, data),
+  getAllPatients: () => medicalClient.get("/patients"), 
+  getPatientById: (id) => medicalClient.get(`/patients/${id}`),
 
-  getExaminationHistory: () => {
-    return medicalClient.get("/patients/examinations");
-  },
+  // --- DOCTOR / CLINIC APIs ---
+  // Lấy danh sách chờ (Queue)
+  getWaitingList: (clinicId) => medicalClient.get("/medical-records/examinations/queue", { params: { clinicId } }),
 
-  updateProfile: (data) => {
-    return medicalClient.put("/patients/me", data);
-  },
+  // Lấy chi tiết ca khám (Bao gồm Heatmap)
+  getExaminationDetail: (id) => medicalClient.get(`/medical-records/examinations/${id}`),
 
-  addMedicalHistory: (patientId, data) => {
-    return medicalClient.post(`/patients/${patientId}/history`, data);
-  },
+  // Bác sĩ lưu kết quả (Verify)
+  // Lưu ý: Backend dùng PUT {id}/verify
+  verifyDiagnosis: (id, data) => medicalClient.put(`/medical-records/examinations/${id}/verify`, data),
 
-  // SỬA TẠI ĐÂY: Đổi axiosClient thành medicalClient
-  getAllPatients: () => {
-    return medicalClient.get("/patients"); 
-  },
+  // In báo cáo (Traceability)
+  getReportData: (id) => medicalClient.get(`/medical-records/reports/${id}/print`),
 
-  getPatientById: (id) => {
-    return medicalClient.get(`/patients/${id}`);
-  },
+  // Thống kê Dashboard
+  getStats: () => medicalClient.get("/medical-records/examinations/stats"),
 
-  saveExamination: (data) => {
-    return medicalClient.post("/medical-records/examinations", data);
+  // Hardware Upload (Giả lập)
+  hardwareCapture: (formData) => {
+    return medicalClient.post(`/hardware/capture`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
   }
 };
 

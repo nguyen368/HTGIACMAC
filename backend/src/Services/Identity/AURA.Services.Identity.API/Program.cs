@@ -71,18 +71,19 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// 2. MIDDLEWARE & MIGRATION
+// 2. MIDDLEWARE & MIGRATION & SEEDING (QUAN TRỌNG)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppIdentityDbContext>();
-        if (context.Database.GetPendingMigrations().Any())
-        {
-            context.Database.Migrate();
-            Console.WriteLine("--> [Identity] Database Migration thành công!");
-        }
+        
+        // Gọi hàm Seed Data từ file DbInitializer
+        // Hàm này sẽ tự động Migrate DB và thêm Admin/Bác sĩ mẫu
+        await DbInitializer.SeedDataAsync(context); 
+        
+        Console.WriteLine("--> [Identity] Database Inited & Seeded Successfully!");
     }
     catch (Exception ex)
     {
