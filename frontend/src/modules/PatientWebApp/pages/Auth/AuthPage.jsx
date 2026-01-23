@@ -1,9 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; 
+import { GoogleLogin } from '@react-oauth/google'; // Import lại GoogleLogin
 import authApi from '../../../../api/authApi';
 import './AuthPage.css';
 import { useAuth } from '../../../../context/AuthContext';
+
+// --- HÀM GIẢI MÃ TOKEN THỦ CÔNG ---
+const parseJwt = (token) => {
+    try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e) { return null; }
+};
 
 const AuthPage = () => {
     const navigate = useNavigate();
@@ -11,27 +23,25 @@ const AuthPage = () => {
     const [activeTab, setActiveTab] = useState('login'); 
     const [isLoading, setIsLoading] = useState(false);
     const [showForgotPassword, setShowForgotPassword] = useState(false);
-    
     const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [showRegPassword, setShowRegPassword] = useState(false);
 
     const [loginData, setLoginData] = useState({ email: '', password: '', remember: false });
-    
     const [regData, setRegData] = useState({
         fullName: '',
         email: '',
         phone: '+84',
         password: '',
         confirmPassword: '',
-        terms: false
+        terms: false,
+        accountType: 'Patient' // Thêm field này để theo dõi Radio button
     });
 
     const [passwordCriteria, setPasswordCriteria] = useState({
         length: false, case: false, number: false, special: false
     });
 
-    // --- LOGIC XỬ LÝ DỮ LIỆU ---
-
+    // --- XỬ LÝ SỰ KIỆN ---
     const handleLoginChange = (e) => {
         const { id, value, checked, type } = e.target;
         setLoginData(prev => ({ ...prev, [id]: type === 'checkbox' ? checked : value }));
@@ -39,7 +49,7 @@ const AuthPage = () => {
 
     const handleRegChange = (e) => {
         const { name, value, checked, type } = e.target;
-        const fieldName = name || e.target.id; 
+        const fieldName = (name === 'account-type') ? 'accountType' : (name || e.target.id);
         setRegData(prev => ({ ...prev, [fieldName]: type === 'checkbox' ? checked : value }));
         if (fieldName === 'password') validatePassword(value);
     };
@@ -53,96 +63,59 @@ const AuthPage = () => {
         });
     };
 
-    // --- XỬ LÝ ĐĂNG NHẬP ---
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
-        if (!loginData.email || !loginData.password) {
-            alert('Vui lòng nhập đầy đủ thông tin đăng nhập!');
-            return;
-        }
         setIsLoading(true);
         try {
-            // res ở đây đã là data nhờ Interceptor trong axiosClient
-            const res = await authApi.login({ 
-                email: loginData.email, 
-                password: loginData.password 
-            });
-
-            // Backend có thể trả về Token trực tiếp hoặc bọc trong object .value
-            const data = res.value || res; 
+            const res = await authApi.login({ email: loginData.email, password: loginData.password });
+            const data = res.data?.value || res.data;
             
             if (data?.token) {
-                // Lưu token đồng bộ để Gateway (cổng 80) nhận diện được
-                localStorage.setItem('aura_token', data.token);
-                localStorage.setItem('token', data.token);
-                
+                localStorage.setItem('aura_token', data.token); // Đồng bộ Key aura_token
                 if (login) await login(data);
 
-                let userRole = 'patient';
-                try {
-                    const decoded = jwtDecode(data.token);
-                    // Bóc tách Role từ JWT Claim tiêu chuẩn hoặc tùy chỉnh
-                    userRole = (decoded.role || 
-                               decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
-                               'patient').toLowerCase();
-                } catch (err) { 
-                    console.warn("Lỗi giải mã Token:", err); 
-                }
-                
-                // Điều hướng người dùng dựa trên phân quyền
-                if (userRole === 'admin' || userRole === 'administrator') navigate('/admin'); 
-                else if (userRole === 'doctor') navigate('/clinic/dashboard'); 
-                else navigate('/patient/dashboard'); 
+                const decoded = parseJwt(data.token);
+                const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
+                const userRole = (decoded?.[roleKey] || decoded?.role || 'patient').toLowerCase();
+
+                // ĐIỀU HƯỚNG CHUẨN
+                if (userRole.includes('admin')) navigate('/admin/dashboard');
+                else if (userRole === 'doctor') navigate('/doctor'); 
+                else navigate('/patient/dashboard');
             }
         } catch (error) {
-            console.error("Auth Error:", error);
-            // Hiển thị thông báo lỗi chi tiết từ Gateway/Backend
-            const msg = error.response?.data?.detail || 
-                        error.response?.data?.errors?.[0] || 
-                        "Thông tin đăng nhập không chính xác hoặc lỗi hệ thống.";
-            alert('Lỗi đăng nhập: ' + msg);
-        } finally { 
-            setIsLoading(false); 
-        }
+            alert('Lỗi: ' + (error.response?.data?.detail || "Sai thông tin đăng nhập"));
+        } finally { setIsLoading(false); }
     };
 
-    // --- XỬ LÝ ĐĂNG KÝ ---
-    const handleRegisterSubmit = async (e) => {
-        e.preventDefault();
-        const { fullName, email, password, confirmPassword, terms } = regData;
-
-        if (!fullName || !email || !password || !confirmPassword) {
-            alert('Vui lòng nhập đầy đủ thông tin!'); return;
-        }
-        if (password !== confirmPassword) {
-            alert('Mật khẩu xác nhận không khớp!'); return;
-        }
-        if (!terms) {
-            alert('Vui lòng đồng ý với Điều khoản dịch vụ!'); return;
-        }
-        if (!Object.values(passwordCriteria).every(Boolean)) {
-            alert('Mật khẩu chưa đáp ứng yêu cầu bảo mật!'); return;
-        }
-
+    const handleGoogleSuccess = async (credentialResponse) => {
         setIsLoading(true);
         try {
-            // Gửi dữ liệu đăng ký qua Gateway (api/auth/register)
-            await authApi.register({
-                username: email, 
-                email: email,
-                password: password,
-                fullName: fullName,
-                role: 'Patient' 
-            });
+            const res = await authApi.googleLogin({ token: credentialResponse.credential });
+            const data = res.data?.value || res.data;
+            if (data?.token) {
+                localStorage.setItem('aura_token', data.token);
+                if (login) await login(data);
+                navigate(data.role?.toLowerCase() === 'doctor' ? '/doctor' : '/patient/dashboard');
+            }
+        } catch (error) { alert("Lỗi đăng nhập Google"); }
+        finally { setIsLoading(false); }
+    };
 
-            alert('Đăng ký thành công! Hệ thống đang chuyển về trang Đăng nhập.');
+    const handleRegisterSubmit = async (e) => {
+        e.preventDefault();
+        if (regData.password !== regData.confirmPassword) { alert('Mật khẩu không khớp!'); return; }
+        setIsLoading(true);
+        try {
+            await authApi.register({
+                username: regData.email, email: regData.email,
+                password: regData.password, fullName: regData.fullName,
+                role: regData.accountType // Gửi đúng Role người dùng chọn
+            });
+            alert('Đăng ký thành công!');
             setActiveTab('login');
-        } catch (error) {
-            const msg = error.response?.data?.detail || "Email đã tồn tại hoặc lỗi kết nối Gateway";
-            alert('Đăng ký thất bại: ' + msg);
-        } finally { 
-            setIsLoading(false); 
-        }
+        } catch (error) { alert('Đăng ký thất bại'); }
+        finally { setIsLoading(false); }
     };
 
     return (
@@ -179,117 +152,112 @@ const AuthPage = () => {
                             </div>
 
                             {activeTab === 'login' && (
-                                <form className="auth-form" onSubmit={handleLoginSubmit}>
-                                    <h3 className="auth-form-title">Đăng nhập tài khoản</h3>
-                                    <div className="form-group">
-                                        <label>Email hoặc Số điện thoại</label>
-                                        <div className="input-with-icon">
-                                            <i className="fas fa-user"></i>
-                                            <input type="text" id="email" placeholder="Nhập email" value={loginData.email} onChange={handleLoginChange} />
+                                <div className="auth-form-wrapper">
+                                    <form className="auth-form" onSubmit={handleLoginSubmit}>
+                                        <h3 className="auth-form-title">Đăng nhập tài khoản</h3>
+                                        <div className="form-group">
+                                            <label>Email hoặc Số điện thoại</label>
+                                            <div className="input-with-icon">
+                                                <i className="fas fa-user"></i>
+                                                <input type="text" id="email" placeholder="Nhập email" value={loginData.email} onChange={handleLoginChange} />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Mật khẩu</label>
-                                        <div className="input-with-icon">
-                                            <i className="fas fa-lock"></i>
-                                            <input type={showLoginPassword ? "text" : "password"} id="password" placeholder="Nhập mật khẩu" value={loginData.password} onChange={handleLoginChange} />
-                                            <button type="button" className="password-toggle" onClick={() => setShowLoginPassword(!showLoginPassword)}>
-                                                <i className={`fas ${showLoginPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                                            </button>
+                                        <div className="form-group">
+                                            <label>Mật khẩu</label>
+                                            <div className="input-with-icon">
+                                                <i className="fas fa-lock"></i>
+                                                <input type={showLoginPassword ? "text" : "password"} id="password" placeholder="Mật khẩu" value={loginData.password} onChange={handleLoginChange} />
+                                                <button type="button" className="password-toggle" onClick={() => setShowLoginPassword(!showLoginPassword)}>
+                                                    <i className={`fas ${showLoginPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="checkbox-group">
-                                        <input type="checkbox" id="remember" checked={loginData.remember} onChange={handleLoginChange} />
-                                        <label htmlFor="remember">Ghi nhớ đăng nhập</label>
-                                    </div>
-                                    <button type="submit" className="auth-btn" disabled={isLoading}>{isLoading ? 'Đang xử lý...' : 'Đăng nhập'}</button>
-                                    <div className="auth-links">
-                                        <span className="auth-link" onClick={() => setShowForgotPassword(true)}>Quên mật khẩu?</span>
-                                        <span> | </span>
-                                        <span className="auth-link" onClick={() => setActiveTab('register')}>Chưa có tài khoản? Đăng ký ngay</span>
-                                    </div>
-                                </form>
+                                        <div className="checkbox-group">
+                                            <input type="checkbox" id="remember" checked={loginData.remember} onChange={handleLoginChange} />
+                                            <label htmlFor="remember">Ghi nhớ đăng nhập</label>
+                                        </div>
+                                        <button type="submit" className="auth-btn" disabled={isLoading}>{isLoading ? 'Đang xử lý...' : 'Đăng nhập'}</button>
+                                        
+                                        <div style={{ marginTop: '20px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '15px' }}>
+                                            <p style={{ marginBottom: '10px', color: '#666', fontSize: '14px' }}>Hoặc tiếp tục với</p>
+                                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                                <GoogleLogin
+                                                    onSuccess={handleGoogleSuccess}
+                                                    onError={() => alert("Đăng nhập Google thất bại")}
+                                                    theme="outline" shape="pill" text="signin_with" width="100%"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="auth-links" style={{marginTop: '15px'}}>
+                                            <span className="auth-link" onClick={() => setShowForgotPassword(true)}>Quên mật khẩu?</span>
+                                            <span> | </span>
+                                            <span className="auth-link" onClick={() => setActiveTab('register')}>Đăng ký ngay</span>
+                                        </div>
+                                    </form>
+                                </div>
                             )}
 
                             {activeTab === 'register' && (
                                 <form className="auth-form" onSubmit={handleRegisterSubmit}>
                                     <h3 className="auth-form-title">Tạo tài khoản mới</h3>
                                     <div className="form-group">
-                                        <label>Họ và tên</label>
-                                        <div className="input-with-icon">
-                                            <i className="fas fa-user"></i>
-                                            <input type="text" name="fullName" placeholder="Nhập họ và tên đầy đủ" value={regData.fullName} onChange={handleRegChange} />
+                                        <label>Loại tài khoản</label>
+                                        <div className="account-type">
+                                            <input type="radio" id="patient" name="account-type" value="Patient" checked={regData.accountType === 'Patient'} onChange={handleRegChange} />
+                                            <label htmlFor="patient">Bệnh nhân</label>
+                                            <input type="radio" id="doctor" name="account-type" value="Doctor" checked={regData.accountType === 'Doctor'} onChange={handleRegChange} />
+                                            <label htmlFor="doctor">Bác sĩ</label>
+                                            <input type="radio" id="admin" name="account-type" value="Admin" checked={regData.accountType === 'Admin'} onChange={handleRegChange} />
+                                            <label htmlFor="admin">Admin</label>
                                         </div>
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Họ và tên</label>
+                                        <input type="text" name="fullName" placeholder="Nhập họ tên" value={regData.fullName} onChange={handleRegChange} />
                                     </div>
                                     <div className="form-group">
                                         <label>Email</label>
-                                        <div className="input-with-icon">
-                                            <i className="fas fa-envelope"></i>
-                                            <input type="email" name="email" placeholder="Nhập địa chỉ email" value={regData.email} onChange={handleRegChange} />
-                                        </div>
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Số điện thoại</label>
-                                        <div className="input-with-icon">
-                                            <i className="fas fa-phone"></i>
-                                            <input type="tel" name="phone" placeholder="Nhập số điện thoại" value={regData.phone} onChange={handleRegChange} />
-                                        </div>
+                                        <input type="email" name="email" placeholder="Nhập email" value={regData.email} onChange={handleRegChange} />
                                     </div>
                                     <div className="form-group">
                                         <label>Mật khẩu</label>
-                                        <div className="input-with-icon">
-                                            <i className="fas fa-lock"></i>
-                                            <input type={showRegPassword ? "text" : "password"} name="password" placeholder="Nhập mật khẩu" value={regData.password} onChange={handleRegChange} />
-                                            <button type="button" className="password-toggle" onClick={() => setShowRegPassword(!showRegPassword)}>
-                                                <i className={`fas ${showRegPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                                            </button>
-                                        </div>
-                                        <div className="password-requirements">
-                                            <div className={`requirement ${passwordCriteria.length ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.length ? 'fa-check-circle' : 'fa-circle'}`}></i> Tối thiểu 8 ký tự</div>
-                                            <div className={`requirement ${passwordCriteria.case ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.case ? 'fa-check-circle' : 'fa-circle'}`}></i> Chứa chữ hoa và chữ thường</div>
-                                            <div className={`requirement ${passwordCriteria.number ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.number ? 'fa-check-circle' : 'fa-circle'}`}></i> Có ít nhất 1 số</div>
-                                            <div className={`requirement ${passwordCriteria.special ? 'met' : 'not-met'}`}><i className={`fas ${passwordCriteria.special ? 'fa-check-circle' : 'fa-circle'}`}></i> Có ít nhất 1 ký tự đặc biệt</div>
-                                        </div>
+                                        <input type={showRegPassword ? "text" : "password"} name="password" value={regData.password} onChange={handleRegChange} />
+                                    </div>
+                                    <div className="password-requirements">
+                                        <div className={`requirement ${passwordCriteria.length ? 'met' : ''}`}>Tối thiểu 8 ký tự</div>
+                                        <div className={`requirement ${passwordCriteria.special ? 'met' : ''}`}>Có ký tự đặc biệt</div>
                                     </div>
                                     <div className="form-group">
                                         <label>Xác nhận mật khẩu</label>
-                                        <div className="input-with-icon">
-                                            <i className="fas fa-lock"></i>
-                                            <input type="password" name="confirmPassword" placeholder="Nhập lại mật khẩu" value={regData.confirmPassword} onChange={handleRegChange} />
-                                        </div>
+                                        <input type="password" name="confirmPassword" value={regData.confirmPassword} onChange={handleRegChange} />
                                     </div>
                                     <div className="checkbox-group">
                                         <input type="checkbox" name="terms" id="terms" checked={regData.terms} onChange={handleRegChange} />
-                                        <label htmlFor="terms">Tôi đồng ý với Điều khoản dịch vụ</label>
+                                        <label htmlFor="terms">Đồng ý Điều khoản dịch vụ</label>
                                     </div>
-                                    <button type="submit" className="auth-btn" disabled={isLoading}>{isLoading ? 'Đang xử lý...' : 'Đăng ký tài khoản'}</button>
+                                    <button type="submit" className="auth-btn" disabled={isLoading}>Đăng ký</button>
                                 </form>
                             )}
                         </div>
                     </div>
                 </div>
-                <div className="auth-footer">
-                    <p>© 2026 AURA Screening.</p>
-                </div>
+                <div className="auth-footer"><p>© 2026 AURA Screening.</p></div>
             </div>
 
-            {showForgotPassword && ( 
-                <div className="auth-modal"> 
-                    <div className="auth-modal-content"> 
-                        <div className="auth-modal-header"> 
-                            <h3 className="auth-modal-title">Khôi phục mật khẩu</h3> 
-                            <button className="close-modal-btn" onClick={() => setShowForgotPassword(false)}>&times;</button> 
-                        </div> 
-                        <p>Vui lòng nhập email đã đăng ký:</p> 
-                        <div className="form-group" style={{marginTop: '20px'}}> 
-                            <div className="input-with-icon"> 
-                                <i className="fas fa-envelope"></i> 
-                                <input type="email" placeholder="Nhập địa chỉ email" /> 
-                            </div> 
-                        </div> 
-                        <button className="auth-btn" style={{marginTop: '20px'}}>Gửi link khôi phục</button> 
-                    </div> 
-                </div> 
+            {/* Forgot Password Modal */}
+            {showForgotPassword && (
+                <div className="auth-modal">
+                    <div className="auth-modal-content">
+                        <div className="auth-modal-header">
+                            <h3 className="auth-modal-title">Khôi phục mật khẩu</h3>
+                            <button className="close-modal-btn" onClick={() => setShowForgotPassword(false)}>&times;</button>
+                        </div>
+                        <p>Nhập email để nhận liên kết khôi phục:</p>
+                        <input type="email" className="modal-input" placeholder="example@email.com" />
+                        <button className="auth-btn" style={{marginTop: '20px'}}>Gửi yêu cầu</button>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -36,22 +36,15 @@ public class ImagesController : ControllerBase
         [JsonPropertyName("risk_score")] public double RiskScore { get; set; }
         [JsonPropertyName("risk_level")] public string RiskLevel { get; set; } = string.Empty;
         [JsonPropertyName("heatmap_url")] public string HeatmapUrl { get; set; } = string.Empty;
-        [JsonPropertyName("metadata")] public object? Metadata { get; set; } 
     }
 
     private async Task<AiDiagnosisResponse?> CallAiDiagnosis(string fileName, string imageUrl) {
         try {
             var client = _httpClientFactory.CreateClient();
-            // Gọi qua tên service trong mạng Docker
             string aiUrl = "http://ai-core-service:8000/api/ai/auto-diagnosis"; 
-            // Thiết lập timeout dài hơn (60s) vì AI quét ảnh tốn thời gian
-            client.Timeout = TimeSpan.FromSeconds(60);
             var response = await client.PostAsJsonAsync(aiUrl, new { file_name = fileName, image_url = imageUrl });
             return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<AiDiagnosisResponse>() : null;
-        } catch (Exception ex) {
-            Console.WriteLine($"--> [Imaging] Lỗi gọi AI: {ex.Message}");
-            return null;
-        }        
+        } catch { return null; }
     }
 
     [HttpPost("upload")]
@@ -59,32 +52,25 @@ public class ImagesController : ControllerBase
     {
         if (request.File == null || request.File.Length == 0) return BadRequest("File rỗng");
         try {
-            // 1. Upload ảnh lên Cloud (Cloudinary)
             var result = await _uploader.UploadAsync(request.File);
-            
-            // 2. Gọi AI để kiểm định ngay lập tức
-            var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
-
-            // 3. XỬ LÝ NẾU AI TỪ CHỐI (Ảnh mặt người, phong cảnh...)
-            if (aiResult != null && aiResult.Status == "Rejected") {
-                return BadRequest(new { 
-                    Status = "Rejected",
-                    Message = aiResult.Diagnosis, // Thông báo từ AI cực kỳ khó tính
-                    Url = result.Url 
-                });
-            }
-
-            // 4. CHỈ LƯU VÀO DB NẾU LÀ VÕNG MẠC THẬT
             var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
             _context.Images.Add(image);
             await _context.SaveChangesAsync();
 
+            var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
             await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, result.Url, request.PatientId, request.ClinicId));
 
+            // Khai báo biến này để dùng trong lệnh return
+            string finalStatus = (aiResult != null && aiResult.Status == "Rejected") ? "Rejected" : "Success";
+
             return Ok(new { 
-                Message = "Sàng lọc hoàn tất thành công", 
+                Message = (finalStatus == "Rejected") ? "Ảnh bị từ chối" : "Upload thành công", 
                 Details = new[] { new { 
-                    FileName = request.File.FileName, Status = "Success", Url = result.Url, Id = image.Id, AiDiagnosis = aiResult 
+                    FileName = request.File.FileName, 
+                    Status = finalStatus, 
+                    Url = result.Url, 
+                    Id = image.Id, 
+                    AiDiagnosis = aiResult 
                 }}
             });
         } catch (Exception ex) { return StatusCode(500, ex.Message); }
@@ -94,9 +80,7 @@ public class ImagesController : ControllerBase
     public async Task<IActionResult> BatchUpload(IFormFile zipFile, [FromForm] Guid clinicId, [FromForm] Guid patientId)
     {
         if (zipFile == null || zipFile.Length == 0) return BadRequest("File rỗng");
-        var results = new List<object>();
         int successCount = 0;
-
         using (var stream = zipFile.OpenReadStream())
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
         {
@@ -105,31 +89,23 @@ public class ImagesController : ControllerBase
                 if (string.IsNullOrEmpty(entry.Name) || entry.FullName.StartsWith("__")) continue;
                 var ext = Path.GetExtension(entry.Name).ToLower();
                 if (ext != ".jpg" && ext != ".png" && ext != ".jpeg") continue;
-
                 try {
-                    using (var entryStream = entry.Open())
-                    using (var memoryStream = new MemoryStream()) {
-                        await entryStream.CopyToAsync(memoryStream);
-                        memoryStream.Position = 0;
-                        var uploadRes = await _uploader.UploadStreamAsync(memoryStream, entry.Name);
-                        if (!string.IsNullOrEmpty(uploadRes.Url)) {
-                            var aiCheck = await CallAiDiagnosis(entry.Name, uploadRes.Url);
-                            if (aiCheck != null && aiCheck.Status == "Success") {
-                                var image = new ImageMetadata(patientId, clinicId, uploadRes.Url, uploadRes.PublicId);
-                                _context.Images.Add(image);
-                                await _context.SaveChangesAsync(); 
-                                await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, uploadRes.Url, patientId, clinicId));
-                                results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadRes.Url }); 
-                                successCount++;
-                            } else {
-                                results.Add(new { FileName = entry.Name, Status = "Rejected", Message = "Ảnh không đạt chuẩn võng mạc" });
-                            }
-                        }
+                    using var entryStream = entry.Open();
+                    using var memoryStream = new MemoryStream();
+                    await entryStream.CopyToAsync(memoryStream);
+                    memoryStream.Position = 0;
+                    var uploadRes = await _uploader.UploadStreamAsync(memoryStream, entry.Name);
+                    if (!string.IsNullOrEmpty(uploadRes.Url)) {
+                        var image = new ImageMetadata(patientId, clinicId, uploadRes.Url, uploadRes.PublicId);
+                        _context.Images.Add(image);
+                        await _context.SaveChangesAsync();
+                        await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, uploadRes.Url, patientId, clinicId));
+                        successCount++;
                     }
                 } catch { }
             }
         }
-        return Ok(new { Message = $"Hoàn tất xử lý lô: {successCount} ảnh hợp lệ", Details = results });
+        return Ok(new { Message = $"Hoàn tất: {successCount} ảnh đã được xử lý" });
     }
 
     [HttpGet("stats/{clinicId}")]
@@ -140,10 +116,13 @@ public class ImagesController : ControllerBase
         return Ok(new { Summary = new { TotalScans = total }, RecentActivity = recent });
     }
 
-    [HttpGet("patient/{patientId}")]
-    public async Task<IActionResult> GetImagesByPatient(Guid patientId) {
-        var images = await _context.Images.Where(i => i.PatientId == patientId).OrderByDescending(i => i.UploadedAt)
-            .Select(i => new { i.Id, i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm"), FileName = "Ảnh đáy mắt" }).ToListAsync();
-        return Ok(images);
+    [HttpDelete("{imageId}")]
+    public async Task<IActionResult> DeleteImage(Guid imageId)
+    {
+        var image = await _context.Images.FindAsync(imageId);
+        if (image == null) return NotFound();
+        _context.Images.Remove(image);
+        await _context.SaveChangesAsync();
+        return Ok(new { Message = "Đã xóa ảnh thành công." });
     }
 }

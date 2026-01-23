@@ -11,8 +11,10 @@ RUN apt-get update && apt-get install -y \
 
 # Copy và cài đặt thư viện Python
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+# Cài đặt torch bản CPU trước (nhẹ hơn, tránh lỗi mạng)
+RUN pip install --default-timeout=1000 --no-cache-dir torch==2.1.1 --index-url https://download.pytorch.org/whl/cpu
+# Cài các thư viện còn lại
+RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 # Copy source code
 COPY . .
 

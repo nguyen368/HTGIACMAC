@@ -23,6 +23,11 @@ public class PatientsController : ControllerBase
         _validator = validator;
     }
 
+    // =================================================================================
+    // 1. QUẢN LÝ HỒ SƠ CÁ NHÂN (PROFILE)
+    // =================================================================================
+
+    // [POST] api/patients -> Tạo hồ sơ lần đầu
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] UpdatePatientProfileRequest request)
     {
@@ -47,6 +52,7 @@ public class PatientsController : ControllerBase
         return Ok(patient);
     }
 
+    // [GET] api/patients/me -> Xem hồ sơ của chính mình
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
@@ -55,14 +61,16 @@ public class PatientsController : ControllerBase
 
         var patient = await _context.Patients
             .Include(p => p.MedicalHistories) 
-            .AsNoTracking()
+            .AsNoTracking() // Tối ưu đọc
             .FirstOrDefaultAsync(p => p.UserId == userId);
 
+        // Nếu chưa có hồ sơ, trả về 404 hoặc null tùy logic FE, ở đây return NotFound để FE biết redirect
         if (patient == null) return NotFound("Chưa cập nhật hồ sơ y tế.");
 
         return Ok(patient);
     }
 
+    // [PUT] api/patients/me -> Cập nhật thông tin (Đã giữ logic UPSERT của bạn)
     [HttpPut("me")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdatePatientProfileRequest request)
     {
@@ -78,6 +86,7 @@ public class PatientsController : ControllerBase
         var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
 
+        // 3. Logic UPSERT (Update or Insert) - FIX QUAN TRỌNG
         if (patient == null) 
         {
             patient = new Patient(userId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
@@ -123,10 +132,11 @@ public class PatientsController : ControllerBase
 
     private Guid GetUserIdFromToken()
     {
-        // Thử lấy ID từ nhiều nguồn Claim khác nhau để đảm bảo không sót
-        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                        ?? User.FindFirst("sub")?.Value 
-                        ?? User.FindFirst("id")?.Value;
+        var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdString))
+        {
+            userIdString = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
+        }
 
         if (Guid.TryParse(userIdString, out var userId)) return userId;
         return Guid.Empty;

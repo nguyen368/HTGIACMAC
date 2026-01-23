@@ -1,31 +1,20 @@
-# --- Stage 1: Build React App (Dùng Node để build code) ---
-FROM node:18-alpine as build
-
+# GIAI ĐOẠN 1: Build mã nguồn React
+FROM node:18-alpine AS build
 WORKDIR /app
-
-# Copy package.json trước để tận dụng cache của Docker
 COPY package*.json ./
-
-# Cài đặt dependencies (dùng npm ci để cài chính xác phiên bản trong lock file nếu có)
 RUN npm install --legacy-peer-deps
-
-# Copy toàn bộ source code frontend vào
 COPY . .
-
-# Thực hiện lệnh build (kết quả sẽ nằm trong thư mục /app/build)
+# Bỏ qua lỗi cảnh báo (Warning) từ ESLint để đảm bảo build thành công
+ENV CI=false
 RUN npm run build
 
-# --- Stage 2: Production Server (Dùng Nginx để chạy web) ---
+# GIAI ĐOẠN 2: Chạy sản phẩm bằng Nginx (Cực nhẹ)
 FROM nginx:alpine
-
-# Copy file cấu hình nginx (Bạn cần tạo file này trong thư mục frontend/)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy kết quả build từ Stage 1 sang thư mục chạy web của Nginx
+# Copy toàn bộ file tĩnh từ giai đoạn build vào thư mục phục vụ của Nginx
 COPY --from=build /app/build /usr/share/nginx/html
 
-# Mở port 80 (Port mặc định của Nginx trong container)
-EXPOSE 80
+# COPY CẤU HÌNH: Ghi đè file nginx.conf tổng của container bằng file chúng ta vừa tạo ở trên
+COPY nginx.conf /etc/nginx/nginx.conf
 
-# Chạy Nginx ở chế độ foreground
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

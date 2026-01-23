@@ -1,21 +1,22 @@
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider } from './context/AuthContext';
 import AppRoutes from './routes/AppRoutes';
-import './App.css'; 
+import './App.css';
 
 function App() {
+  // Client ID Google của dự án AURA
+  const GOOGLE_CLIENT_ID = "738290642667-5ijkcle6dmrk4rboc9i7djnombohemcv.apps.googleusercontent.com";
+
   return (
-    <div className="App">
-      {/* 1. Bọc BrowserRouter để kích hoạt tính năng định tuyến (Routing) */}
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <BrowserRouter>
-        {/* 2. Bọc AuthProvider để quản lý trạng thái đăng nhập cho toàn bộ ứng dụng */}
         <AuthProvider>
-          {/* 3. Gọi AppRoutes: Nơi chứa logic chuyển trang (Login, Dashboard, v.v.) */}
           <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
-    </div>
+    </GoogleOAuthProvider>
   );
 }
 

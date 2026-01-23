@@ -1,0 +1,16 @@
+# Chặn các thư mục thư viện nặng
+**/node_modules/
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+
+# Chặn dữ liệu thực tế (Database và Ảnh)
+**/postgres_data/
+**/uploads_data/
+**/ai_static/
+
+# Chặn Git và Logs
+.git/
+.gitignore
+*.log
