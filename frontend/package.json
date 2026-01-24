@@ -54,6 +54,11 @@
   },
   "proxy": "http://localhost:8000",
   "overrides": {
-    "fork-ts-checker-webpack-plugin": "6.5.0"
+    "react-scripts": {
+      "typescript": "^4.9.5"
+    },
+    "fork-ts-checker-webpack-plugin": "6.5.0",
+    "ajv": "^6.12.6",
+    "ajv-keywords": "3.5.2"
   }
 }
