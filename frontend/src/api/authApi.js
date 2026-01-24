@@ -5,17 +5,25 @@ const authApi = {
         const url = '/auth/login';
         return axiosClient.post(url, data);
     },
+
     register: (data) => {
         const url = '/auth/register';
         return axiosClient.post(url, data);
     },
     
-    // --- THÊM HÀM NÀY ĐỂ GỌI BACKEND ---
     googleLogin: (googleToken) => {
-        // Đây là API mà Backend của bạn PHẢI CÓ
         const url = '/auth/google-login'; 
-        // Gửi token sang backend dưới dạng JSON
         return axiosClient.post(url, { token: googleToken }); 
+    },
+
+    // --- Lấy danh sách bệnh nhân ---
+    getAllPatients: () => {
+        return axiosClient.get('/users/patients'); 
+    },
+
+    // --- [MỚI] Tạo bệnh nhân mới ---
+    createPatient: (data) => {
+        return axiosClient.post('/users/patients', data);
     }
 };
 

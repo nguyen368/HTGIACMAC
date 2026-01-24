@@ -31,16 +31,22 @@ namespace AURA.Services.Identity.Infrastructure.Services
             // Tạo danh sách Claims (Thông tin đóng gói trong token)
             var claims = new List<Claim>
             {
+                // Sửa: Luôn convert Id sang string an toàn
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim("username", user.Username),
-                new Claim("fullName", user.FullName),
                 
-                // QUAN TRỌNG: Claim Role để Authorization Middleware đọc được
-                new Claim(ClaimTypes.Role, user.Role), 
+                // Sửa: Dùng toán tử ?? "" để nếu null thì thay bằng chuỗi rỗng
+                new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
+                new Claim("username", user.Username ?? ""),
+                
+                // --- ĐÂY LÀ CHỖ GÂY LỖI 500 ---
+                // Tôi đã sửa thành: user.FullName ?? "User" 
+                // Nghĩa là: Nếu chưa có tên thì gọi tạm là "User"
+                new Claim("fullName", user.FullName ?? "User"),
+                
+                // Claim Role
+                new Claim(ClaimTypes.Role, user.Role ?? "Patient"), 
 
-                // --- CODE MỚI: THÊM CLINIC ID VÀO TOKEN ---
-                // Nếu User có ClinicId thì đưa vào Token, nếu không (như SuperAdmin) thì để trống
+                // Clinic ID: Nếu null thì để rỗng
                 new Claim("clinicId", user.ClinicId?.ToString() ?? string.Empty),
                 
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())

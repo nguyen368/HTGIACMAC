@@ -31,7 +31,6 @@ const AuthPage = () => {
         password: '',
         confirmPassword: '',
         terms: false
-        // accountType removed, defaulting to Patient in submit handler
     });
 
     // State kiểm tra độ mạnh mật khẩu
@@ -75,7 +74,7 @@ const AuthPage = () => {
         });
     };
 
-    // --- XỬ LÝ LOGIN THƯỜNG (GIỮ NGUYÊN) ---
+    // --- XỬ LÝ LOGIN THƯỜNG (ĐÃ FIX LOGIC LẤY DATA & REDIRECT) ---
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
         if (!loginData.email || !loginData.password) {
@@ -90,132 +89,144 @@ const AuthPage = () => {
                 password: loginData.password
             });
 
-            const data = res.data?.value || res.data || res;
-            
-            if (data?.token) {
-                localStorage.setItem('aura_token', data.token);
-                if (login) await login(data);
+            console.log("🔥 API Response:", res);
 
-                let userRole = '';
-                try {
-                    const decoded = jwtDecode(data.token);
-                    userRole = decoded.role || 
-                               decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
-                               'patient'; 
-                } catch (err) {
-                    console.warn("Lỗi decode token:", err);
-                    userRole = 'patient';
+            // XỬ LÝ DỮ LIỆU TRẢ VỀ LINH HOẠT
+            // 1. Nếu API trả về { value: { token: ... } } (Như JSON bạn gửi)
+            // 2. Nếu API trả về thẳng { token: ... }
+            const apiData = res.data || res; // Axios unwrap
+            const finalData = apiData.value || apiData; // Lấy 'value' nếu có
+
+            if (finalData && finalData.token) {
+                console.log("✅ Đã lấy được Token:", finalData.token);
+                
+                // 1. Lưu Token
+                localStorage.setItem('aura_token', finalData.token);
+                
+                // 2. Update Context (nếu có)
+                if (login) await login(finalData);
+
+                // 3. Xác định Role (Ưu tiên lấy từ response, nếu không thì decode token)
+                let userRole = finalData.role; 
+                
+                if (!userRole) {
+                    try {
+                        const decoded = jwtDecode(finalData.token);
+                        userRole = decoded.role || 
+                                   decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 
+                                   'patient';
+                    } catch (err) {
+                        console.warn("Lỗi decode token:", err);
+                        userRole = 'patient';
+                    }
                 }
-                
+
+                // 4. Chuẩn hóa Role về chữ thường
                 const role = String(userRole).toLowerCase();
-                
-                if (role === 'admin' || role === 'administrator') {
+                console.log("👉 Role User:", role);
+
+                // 5. ĐIỀU HƯỚNG THEO ROLE
+                if (['superadmin', 'admin', 'administrator'].includes(role)) {
                     navigate('/admin/dashboard');
                 } 
                 else if (role === 'doctor') {
-                    navigate('/clinic/dashboard');
-                }
-                else {
-                    navigate('/patient/dashboard'); 
+                    navigate('/doctor');
                 } 
+                else if (role === 'clinicowner') {
+                    // ---> CHUYỂN HƯỚNG CHO CHỦ PHÒNG KHÁM <---
+                    navigate('/clinic/upload'); 
+                } 
+                else {
+                    navigate('/patient/dashboard');
+                }
+            } else {
+                console.error("❌ Response không chứa token hợp lệ:", apiData);
+                alert("Đăng nhập thành công nhưng không nhận được Token.");
             }
+
         } catch (error) {
-            console.error(error);
+            console.error("Lỗi API Login:", error);
             alert('Lỗi đăng nhập: ' + (error.response?.data?.detail || "Kiểm tra lại email/mật khẩu"));
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- XỬ LÝ GOOGLE LOGIN (ĐÃ FIX LỖI CRASH) ---
+    // --- XỬ LÝ GOOGLE LOGIN ---
     const handleGoogleSuccess = async (credentialResponse) => {
         setIsLoading(true);
-        console.log("1. Google Token nhận được:", credentialResponse);
-
         try {
             const googleToken = credentialResponse.credential;
             let finalUser = null;
             let finalRole = 'patient';
 
-            // --- BƯỚC 1: THỬ GỌI BACKEND ---
             try {
                 const res = await authApi.googleLogin(googleToken);
+                // Tương tự: Lấy value nếu có
+                const apiData = res.value || res.data || res;
                 
-                // [FIX LỖI QUAN TRỌNG TẠI ĐÂY]
-                // Vì axiosClient đã trả về data rồi, nên 'res' CHÍNH LÀ data.
-                const backendData = res.value || res; 
-                
-                console.log("2. Backend phản hồi:", backendData);
-
-                if (backendData && backendData.token) {
-                    console.log("✅ Backend xác thực thành công");
-                    // Backend OK -> Dùng data chuẩn từ server
-                    localStorage.setItem('aura_token', backendData.token);
-                    if (login) await login(backendData);
+                if (apiData && apiData.token) {
+                    localStorage.setItem('aura_token', apiData.token);
+                    if (login) await login(apiData);
                     
-                    // Lấy role từ backend
-                    let userRole = backendData.role;
+                    // Xác định role
+                    let userRole = apiData.role;
                     if (!userRole) {
                         try {
-                            const decoded = jwtDecode(backendData.token);
+                            const decoded = jwtDecode(apiData.token);
                             userRole = decoded.role || decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
                         } catch (e) {}
                     }
                     finalRole = String(userRole || 'patient').toLowerCase();
-                    finalUser = backendData;
+                    finalUser = apiData;
                 }
             } catch (apiError) {
-                console.warn("⚠️ API Backend lỗi hoặc chưa có (404). Chuyển sang chế độ Offline.", apiError);
+                console.warn("⚠️ API Google Login lỗi, dùng chế độ Offline.", apiError);
             }
 
-            // --- BƯỚC 2: CHẾ ĐỘ DỰ PHÒNG (NẾU BƯỚC 1 FAIL HOẶC NULL) ---
             if (!finalUser) {
-                console.log("🔄 Đang dùng chế độ đăng nhập Offline (Client-side decode)");
+                // Chế độ Offline (Decode token Google trực tiếp)
                 const decodedGoogle = jwtDecode(googleToken);
                 
-                // Hack quyền Admin cho email của bạn để test
                 if (decodedGoogle.email === 'darxel14102005@gmail.com') {
                     finalRole = 'admin';
                 } else {
                     finalRole = 'patient';
                 }
 
-                // Tạo user giả lập từ thông tin Google
-                const fakeUser = {
+                finalUser = {
                     token: googleToken, 
                     fullName: decodedGoogle.name,
-                    email: decodedGoogle.email,
-                    picture: decodedGoogle.picture,
                     role: finalRole 
                 };
-
                 localStorage.setItem('aura_token', googleToken);
-                if (login) await login(fakeUser);
-                finalUser = fakeUser;
+                if (login) await login(finalUser);
             }
 
-            // --- BƯỚC 3: ĐIỀU HƯỚNG ---
             if (finalUser) {
-                alert(`Đăng nhập thành công! Xin chào ${finalUser.fullName}`);
+                alert(`Đăng nhập thành công! Xin chào ${finalUser.fullName || "Bạn"}`);
                 
-                if (finalRole === 'admin' || finalRole === 'administrator') {
+                // Logic điều hướng Google giống hệt Login thường
+                if (['admin', 'administrator', 'superadmin'].includes(finalRole)) {
                     navigate('/admin/dashboard');
                 } else if (finalRole === 'doctor') {
-                    navigate('/clinic/dashboard');
+                    navigate('/doctor');
+                } else if (finalRole === 'clinicowner') {
+                    navigate('/clinic/upload');
                 } else {
                     navigate('/patient/dashboard');
                 }
             }
 
         } catch (error) {
-            console.error("❌ Lỗi nghiêm trọng khi xử lý Google Login:", error);
-            alert("Đăng nhập thất bại. Vui lòng thử lại.");
+            console.error("Lỗi Google Login:", error);
+            alert("Đăng nhập Google thất bại.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- XỬ LÝ ĐĂNG KÝ (ĐÃ BỎ CHỌN ROLE - MẶC ĐỊNH PATIENT) ---
+    // --- XỬ LÝ ĐĂNG KÝ (GIỮ NGUYÊN) ---
     const handleRegisterSubmit = async (e) => {
         e.preventDefault();
         const { fullName, email, password, confirmPassword, terms } = regData;
@@ -235,7 +246,6 @@ const AuthPage = () => {
 
         setIsLoading(true);
         try {
-            // Mặc định luôn gửi Role là Patient
             await authApi.register({
                 username: email, 
                 email: email,
@@ -247,7 +257,7 @@ const AuthPage = () => {
             alert('Đăng ký thành công! Vui lòng đăng nhập.');
             setActiveTab('login');
         } catch (error) {
-            alert('Đăng ký thất bại: ' + (error.response?.data?.detail || "Email đã tồn tại hoặc lỗi hệ thống"));
+            alert('Đăng ký thất bại: ' + (error.response?.data?.detail || "Lỗi hệ thống"));
         } finally {
             setIsLoading(false);
         }
@@ -313,7 +323,6 @@ const AuthPage = () => {
                                         </div>
                                         <button type="submit" className="auth-btn" disabled={isLoading}>{isLoading ? 'Đang xử lý...' : 'Đăng nhập'}</button>
                                         
-                                        {/* --- NÚT GOOGLE LOGIN (CẤU HÌNH CHUẨN) --- */}
                                         <div style={{ marginTop: '20px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '15px' }}>
                                             <p style={{ marginBottom: '10px', color: '#666', fontSize: '14px' }}>Hoặc tiếp tục với</p>
                                             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -327,12 +336,10 @@ const AuthPage = () => {
                                                     shape="pill"
                                                     text="signin_with"
                                                     width="100%"
-                                                    // QUAN TRỌNG: Dòng này fix lỗi origin_mismatch
                                                     cookiePolicy={'single_host_origin'} 
                                                 />
                                             </div>
                                         </div>
-                                        {/* ------------------------- */}
 
                                         <div className="auth-links" style={{marginTop: '15px'}}>
                                             <span className="auth-link" onClick={() => setShowForgotPassword(true)}>Quên mật khẩu?</span>
@@ -346,8 +353,6 @@ const AuthPage = () => {
                             {activeTab === 'register' && (
                                 <form className="auth-form" onSubmit={handleRegisterSubmit}>
                                     <h3 className="auth-form-title">Tạo tài khoản bệnh nhân</h3>
-                                    
-                                    {/* ĐÃ BỎ PHẦN CHỌN ACCOUNT TYPE */}
                                     
                                     <div className="form-group">
                                         <label>Họ và tên</label>

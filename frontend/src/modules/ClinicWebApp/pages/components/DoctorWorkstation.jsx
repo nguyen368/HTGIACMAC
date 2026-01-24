@@ -1,152 +1,177 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom'; // Thêm useParams để lấy ID từ URL
+import { useParams, useNavigate } from 'react-router-dom';
+import medicalApi from '../../../../api/medicalApi';
 import './DoctorWorkstation.css';
 
-const DoctorWorkstation = () => { // Bỏ props examId cứng
-  const { id } = useParams(); // Lấy ID từ URL: /clinic/exam/:id
+const DoctorWorkstation = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
+  const [queue, setQueue] = useState([]);
   const [exam, setExam] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [doctorNotes, setDoctorNotes] = useState('');
   const [finalDiagnosis, setFinalDiagnosis] = useState('');
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  const API_BASE_URL = "http://localhost:5002/api/examinations";
-
+  // Load danh sách và thống kê
   useEffect(() => {
-    // Nếu không có ID trên URL -> Đây là trang Dashboard tổng
-    if (!id) {
-        setLoading(false);
-        return;
-    }
+    loadInitialData();
+  }, [searchTerm]);
 
-    // Nếu có ID -> Tải chi tiết ca khám
-    setLoading(true);
-    fetch(`${API_BASE_URL}/${id}`)
-      .then(res => {
-        if (!res.ok) throw new Error("Không tìm thấy hồ sơ.");
-        return res.json();
-      })
-      .then(data => {
-        setExam(data);
-        setFinalDiagnosis(data.diagnosisResult || "");
-        setDoctorNotes(data.doctorNotes || "");
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("Lỗi:", err);
-        setError(err.message);
-        setLoading(false);
-      });
+  // Load chi tiết khi ID URL thay đổi
+  useEffect(() => {
+    if (id) loadExaminationDetail(id);
   }, [id]);
 
-  const handleVerify = async () => {
-    if (!id) return;
-    const payload = { doctorNotes, finalDiagnosis };
+  const loadInitialData = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/${id}/verify`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      if (response.ok) {
-        alert("✅ Đã duyệt hồ sơ thành công!");
-        setExam(prev => ({ ...prev, status: 'Verified' })); // Cập nhật UI ngay
-      } else {
-        alert("⚠️ Lỗi: " + (result.detail || "Không thể duyệt hồ sơ"));
-      }
-    } catch (error) {
-      alert("❌ Lỗi kết nối server");
+      const [queueRes, statsRes] = await Promise.all([
+        medicalApi.getQueue(searchTerm),
+        medicalApi.getStats()
+      ]);
+      setQueue(queueRes);
+      setStats(statsRes);
+      setLoading(false);
+    } catch (err) {
+      console.error("Lỗi tải dữ liệu:", err);
+      setLoading(false);
     }
   };
 
-  // --- MÀN HÌNH DASHBOARD TỔNG (KHI KHÔNG CÓ ID) ---
-  if (!id) {
-      return (
-        <div className="doctor-workstation-container" style={{ padding: '40px', textAlign: 'center' }}>
-            <h1>👨‍⚕️ Bàn Làm Việc Bác Sĩ</h1>
-            <p>Chào mừng bạn quay trở lại. Vui lòng chọn tác vụ:</p>
-            <div style={{ marginTop: '30px', display: 'flex', gap: '20px', justifyContent: 'center' }}>
-                <button 
-                    onClick={() => navigate('/clinic/upload')}
-                    style={{ padding: '15px 30px', fontSize: '18px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                >
-                    📸 Upload Ca Khám Mới
-                </button>
-            </div>
-        </div>
-      );
-  }
+  const loadExaminationDetail = async (examId) => {
+    try {
+      const data = await medicalApi.getExaminationById(examId);
+      setExam(data);
+      setFinalDiagnosis(data.diagnosisResult || "");
+      setDoctorNotes(data.doctorNotes || "");
+    } catch (err) {
+      alert("Không thể tải chi tiết ca khám.");
+    }
+  };
 
-  // --- CÁC TRẠNG THÁI LOADING / ERROR ---
-  if (loading) return <div className="loading-screen">Connecting to Medical Record System...</div>;
-  if (error) return <div className="error-screen">⚠️ System Error: {error}</div>;
-  if (!exam) return <div className="empty-screen">Hồ sơ không tồn tại.</div>;
+  const handleVerify = async () => {
+    if (!id) return;
+    try {
+      await medicalApi.verifyExamination(id, { 
+        doctorNotes, 
+        finalDiagnosis 
+      });
+      alert("✅ Đã duyệt hồ sơ thành công!");
+      loadInitialData(); // Refresh danh sách
+      setExam(prev => ({ ...prev, status: 'Verified' }));
+    } catch (error) {
+      alert("❌ Lỗi: " + (error.response?.data?.detail || "Không thể kết nối server"));
+    }
+  };
 
-  const isVerified = exam.status === 'Verified';
+  if (loading) return <div className="loading-screen">Đang kết nối hệ thống y tế...</div>;
 
-  // --- MÀN HÌNH CHI TIẾT CA KHÁM ---
   return (
     <div className="medical-workstation-container">
-      {/* PANEL TRÁI: ẢNH */}
-      <div className="image-viewer-panel">
-        <div className="image-header"><span>👁️ Ảnh chụp đáy mắt gốc</span></div>
-        <div className="image-container-inner">
-          {exam.imageUrl ? (
-            <img src={exam.imageUrl} alt="Medical Scan" className="main-medical-image" />
-          ) : (
-            <div className="no-image-placeholder">Không có dữ liệu hình ảnh</div>
-          )}
+      {/* SIDEBAR DANH SÁCH (FR-13, FR-18) */}
+      <div className="workstation-sidebar">
+        <div className="sidebar-header">
+          <h3>Hàng chờ khám</h3>
+          <input 
+            type="text" 
+            placeholder="Tìm tên bệnh nhân..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-input"
+          />
+        </div>
+        <div className="queue-list">
+          {queue.map(item => (
+            <div 
+              key={item.id} 
+              className={`queue-item ${id === item.id ? 'active' : ''}`}
+              onClick={() => navigate(`/clinic/exam/${item.id}`)}
+            >
+              <div className="item-info">
+                <strong>{item.patientName}</strong>
+                <span>{new Date(item.examDate).toLocaleDateString()}</span>
+              </div>
+              <span className={`badge status-${item.status.toLowerCase()}`}>{item.status}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* PANEL PHẢI: THÔNG TIN */}
-      <div className="data-panel">
-        <div className="panel-header">
-          <div>
-            <h1>Doctor Workstation</h1>
-            <p className="subtitle">Mã hồ sơ: {id.substring(0,8)}</p>
+      {/* PANEL CHI TIẾT (FR-14, 15, 16) */}
+      <div className="main-content-panel">
+        {!id ? (
+          <div className="dashboard-summary">
+            <h1>👨‍⚕️ Tổng quan công việc</h1>
+            {stats && (
+              <div className="stats-grid">
+                <div className="stat-card"><h3>{stats.totalPatients}</h3><p>Bệnh nhân</p></div>
+                <div className="stat-card"><h3>{stats.pendingExams}</h3><p>Chờ khám</p></div>
+                <div className="stat-card warning"><h3>{stats.highRiskCases}</h3><p>Nguy cơ cao</p></div>
+              </div>
+            )}
+            <button className="primary-button" onClick={() => navigate('/clinic/upload')}>+ Tiếp nhận ca mới</button>
           </div>
-          <div className={`status-badge status-${exam.status?.toLowerCase()}`}>{exam.status}</div>
-        </div>
-
-        <div className="medical-card patient-info-card">
-            <div className="card-row">
-                <div><label>Bệnh nhân:</label><strong>{exam.patientName || "Khách vãng lai"}</strong></div>
-                <div><label>Ngày khám:</label><strong>{new Date(exam.examDate).toLocaleDateString('vi-VN')}</strong></div>
+        ) : !exam ? (
+          <div className="empty-screen">Đang tải chi tiết...</div>
+        ) : (
+          <div className="exam-detail-view">
+            <div className="view-header">
+              <h2>Ca khám: {exam.patientName}</h2>
+              <span className={`status-banner status-${exam.status.toLowerCase()}`}>{exam.status}</span>
             </div>
-        </div>
 
-        {/* FORM CHẨN ĐOÁN */}
-        <div className={`medical-card diagnosis-form-card ${isVerified ? 'verified-mode' : ''}`}>
-          <div className="card-title"><span>👨‍⚕️ Kết luận chuyên môn</span></div>
-          
-          <div className="form-group">
-            <label>Chẩn đoán xác định:</label>
-            <input 
-              type="text" className="medical-input"
-              value={finalDiagnosis} onChange={(e) => setFinalDiagnosis(e.target.value)}
-              placeholder="Nhập kết luận bệnh học..." disabled={isVerified}
-            />
+            <div className="work-grid">
+              <div className="image-section">
+                <div className="image-card">
+                  <div className="card-header">Ảnh đáy mắt gốc</div>
+                  <img src={exam.imageUrl || 'https://via.placeholder.com/400'} alt="Scan" />
+                </div>
+                {exam.aiDiagnosis && (
+                    <div className="ai-insight">
+                        <strong>🤖 AI Gợi ý:</strong> {exam.aiDiagnosis}
+                    </div>
+                )}
+              </div>
+
+              <div className="form-section">
+                <div className="medical-card">
+                  <label>Chẩn đoán chuyên môn (FR-15):</label>
+                  <select 
+                    value={finalDiagnosis} 
+                    onChange={(e) => setFinalDiagnosis(e.target.value)}
+                    className="medical-select"
+                    disabled={exam.status === 'Verified'}
+                  >
+                    <option value="">-- Chọn chẩn đoán --</option>
+                    <option value="Bình thường">Bình thường</option>
+                    <option value="NPDR nhẹ">NPDR nhẹ</option>
+                    <option value="NPDR trung bình">NPDR trung bình</option>
+                    <option value="NPDR nặng">NPDR nặng</option>
+                    <option value="PDR">PDR (Nguy hiểm)</option>
+                  </select>
+
+                  <label>Ghi chú & Chỉ định (FR-16):</label>
+                  <textarea 
+                    value={doctorNotes} 
+                    onChange={(e) => setDoctorNotes(e.target.value)}
+                    rows="6"
+                    className="medical-textarea"
+                    disabled={exam.status === 'Verified'}
+                    placeholder="Nhập ghi chú lâm sàng..."
+                  />
+
+                  {exam.status !== 'Verified' ? (
+                    <button className="verify-btn" onClick={handleVerify}>Xác nhận & Hoàn tất</button>
+                  ) : (
+                    <div className="verified-msg">✅ Hồ sơ đã được bác sĩ ký duyệt</div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
-
-          <div className="form-group">
-            <label>Ghi chú / Chỉ định:</label>
-            <textarea 
-              rows="5" className="medical-textarea"
-              value={doctorNotes} onChange={(e) => setDoctorNotes(e.target.value)}
-              placeholder="Nhập hướng điều trị..." disabled={isVerified}
-            />
-          </div>
-
-          {!isVerified ? (
-            <button className="primary-button verify-button" onClick={handleVerify}>Xác nhận & Duyệt hồ sơ</button>
-          ) : (
-            <div className="verified-banner">✅ Hồ sơ đã được duyệt.</div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

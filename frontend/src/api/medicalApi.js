@@ -1,29 +1,29 @@
-// frontend/src/api/medicalApi.js
 import axiosClient from "./axiosClient";
 
 const medicalApi = {
-  // Lấy danh sách tất cả bệnh nhân
-  getAllPatients: () => {
-    return axiosClient.get("/patients"); 
-    // -> /api/patients (Gateway sẽ chuyển sang Medical Service)
-  },
+  // Lấy danh sách bệnh nhân
+  getAllPatients: () => axiosClient.get("/patients"),
   
-  // Lấy chi tiết 1 bệnh nhân
-  getPatientById: (id) => {
-    return axiosClient.get(`/patients/${id}`);
-  },
+  // Lấy chi tiết bệnh nhân
+  getPatientById: (id) => axiosClient.get(`/patients/${id}`),
 
-  // Cập nhật hồ sơ cá nhân
-  updateProfile: (data) => {
-    return axiosClient.put("/patients/me", data);
-  },
+  // Dashboard thống kê (FR-21)
+  getStats: () => axiosClient.get("/medical-records/examinations/stats"),
 
-  // Lưu kết quả khám
-  saveExamination: (data) => {
-    // Lưu ý: Đường dẫn này phải khớp với Nginx location
-    // Nếu Nginx cấu hình /api/examinations/ -> thì ở đây gọi /examinations
-    return axiosClient.post("/examinations", data);
-  }
+  // Lấy danh sách hàng chờ (FR-13, FR-18)
+  getQueue: (searchTerm = "") => 
+    axiosClient.get(`/medical-records/examinations/queue${searchTerm ? `?searchTerm=${searchTerm}` : ""}`),
+
+  // Lấy chi tiết ca khám (FR-14)
+  getExaminationById: (id) => axiosClient.get(`/medical-records/examinations/${id}`),
+
+  // Lưu/Duyệt kết quả chẩn đoán (FR-15, FR-16)
+  verifyExamination: (id, data) => 
+    axiosClient.put(`/medical-records/examinations/${id}/verify`, data),
+
+  saveExamination: (data) => axiosClient.post("/medical-records/examinations", data),
+  
+  updateProfile: (data) => axiosClient.put("/patients/me", data),
 };
 
 export default medicalApi;

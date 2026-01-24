@@ -18,10 +18,10 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         }
 
         // =========================================================================
-        // PHẦN 1: API MỚI CHO CLINIC WEB (Upload & Lưu kết quả)
+        // PHẦN 1: API CHO CLINIC WEB (SỬA LỖI PROPERTY)
         // =========================================================================
 
-        // [POST] Tạo mới/Lưu kết quả khám (Quan trọng nhất)
+        // [POST] Tạo mới/Lưu kết quả khám
         [HttpPost]
         public async Task<IActionResult> CreateExamination([FromBody] CreateExaminationRequest request)
         {
@@ -41,7 +41,7 @@ namespace AURA.Services.MedicalRecord.API.Controllers
             return Ok(new { Message = "Đã lưu kết quả khám thành công", Id = examination.Id });
         }
 
-        // [GET] Lấy chi tiết ca khám
+        // [GET] Lấy chi tiết ca khám - FIX LỖI AiDiagnosis
         [HttpGet("{id}")]
         public async Task<IActionResult> GetExaminationById(Guid id)
         {
@@ -51,12 +51,12 @@ namespace AURA.Services.MedicalRecord.API.Controllers
 
             if (exam == null) return NotFound(new { Message = "Không tìm thấy hồ sơ khám" });
 
-            // Tính tuổi an toàn
             var age = exam.Patient != null ? (DateTime.UtcNow.Year - exam.Patient.DateOfBirth.Year) : 0;
 
             return Ok(new 
             {
                 exam.Id,
+                exam.PatientId,
                 PatientName = exam.Patient?.FullName ?? "Unknown",
                 Age = age,
                 Gender = exam.Patient?.Gender ?? "Unknown",
@@ -64,48 +64,27 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 exam.Status,
                 exam.ExamDate,
                 exam.DoctorNotes,
-                DiagnosisResult = exam.Diagnosis // Map field
+                DiagnosisResult = exam.Diagnosis // Sử dụng trường Diagnosis chính
+                // Nếu Entity của bạn có trường AI riêng, hãy đổi thành exam.TenTruongDo
             });
         }
 
-        // [GET] Thống kê Dashboard
-        [HttpGet("stats")]
-        public async Task<IActionResult> GetStats()
-        {
-            var today = DateTime.UtcNow.Date;
-
-            var totalPatients = await _context.Patients.CountAsync();
-            var pendingExams = await _context.Examinations.CountAsync(e => e.Status == "Pending");
-            
-            var completedToday = await _context.Examinations
-                .CountAsync(e => (e.Status == "Completed" || e.Status == "Verified") && e.ExamDate >= today);
-
-            var highRisk = await _context.Examinations
-                .CountAsync(e => (e.Status == "Completed" || e.Status == "Verified") 
-                                 && e.Diagnosis != "Bình thường" 
-                                 && !string.IsNullOrEmpty(e.Diagnosis));
-
-            return Ok(new 
-            {
-                TotalPatients = totalPatients,
-                PendingExams = pendingExams,
-                CompletedToday = completedToday,
-                HighRiskCases = highRisk
-            });
-        }
-
-        // =========================================================================
-        // PHẦN 2: API CŨ CỦA TEAM (Giữ nguyên để không conflict)
-        // =========================================================================
-
+        // [GET] Danh sách chờ khám
         [HttpGet("queue")]
-        public async Task<IActionResult> GetWaitingList()
+        public async Task<IActionResult> GetExaminationQueue([FromQuery] string? searchTerm)
         {
-            var query = await _context.Examinations
-                .AsNoTracking()
+            var query = _context.Examinations
                 .Include(e => e.Patient)
-                .Where(e => e.Status == "Pending" || e.Status == "Analyzed")
-                .OrderBy(e => e.ExamDate)
+                .Where(e => e.Status == "Pending" || e.Status == "Analyzed" || e.Status == "Verified")
+                .AsNoTracking();
+
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                query = query.Where(e => e.Patient.FullName.Contains(searchTerm) || e.Id.ToString().Contains(searchTerm));
+            }
+
+            var results = await query
+                .OrderByDescending(e => e.ExamDate)
                 .Select(e => new ExaminationQueueDto
                 {
                     Id = e.Id,
@@ -117,8 +96,45 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 })
                 .ToListAsync();
 
-            return Ok(query);
+            return Ok(results);
         }
+
+        // [GET] Thống kê Dashboard
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetStats()
+        {
+            var today = DateTime.UtcNow.Date;
+            var totalPatients = await _context.Patients.CountAsync();
+            var pendingExams = await _context.Examinations.CountAsync(e => e.Status == "Pending");
+            var completedToday = await _context.Examinations.CountAsync(e => e.Status == "Verified" && e.ExamDate >= today);
+            var highRisk = await _context.Examinations.CountAsync(e => e.Diagnosis != "Bình thường" && !string.IsNullOrEmpty(e.Diagnosis));
+
+            return Ok(new { TotalPatients = totalPatients, PendingExams = pendingExams, CompletedToday = completedToday, HighRiskCases = highRisk });
+        }
+
+        // [PUT] Xác thực hồ sơ (Dùng method ConfirmDiagnosis có sẵn của bạn)
+        [HttpPut("{id}/verify")]
+        public async Task<IActionResult> VerifyExamination(Guid id, [FromBody] ConfirmDiagnosisRequest request)
+        {
+            var exam = await _context.Examinations.FindAsync(id);
+            if (exam == null) return NotFound("Không tìm thấy ca khám.");
+
+            try
+            {
+                // Gọi method nghiệp vụ đã có trong Entity Examination
+                exam.ConfirmDiagnosis(request.DoctorNotes, request.FinalDiagnosis);
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = "Bác sĩ đã duyệt thành công" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
+            }
+        }
+
+        // =========================================================================
+        // PHẦN 2: API CŨ (GIỮ NGUYÊN)
+        // =========================================================================
 
         [HttpPost("fake")]
         public async Task<IActionResult> CreateFakeData(Guid patientId)
@@ -134,45 +150,13 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         {
             var exam = await _context.Examinations.FindAsync(id);
             if (exam == null) return NotFound("Không tìm thấy ca khám.");
-
-            try
-            {
+            try {
                 exam.UpdateAiResult(aiResult);
                 await _context.SaveChangesAsync();
                 return Ok(new { Message = "Đã cập nhật AI thành công" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
+            } catch (Exception ex) {
+                return BadRequest(ex.Message);
             }
         }
-
-        [HttpPut("{id}/verify")]
-        public async Task<IActionResult> VerifyExamination(Guid id, [FromBody] ConfirmDiagnosisRequest request)
-        {
-            var exam = await _context.Examinations.FindAsync(id);
-            if (exam == null) return NotFound("Không tìm thấy ca khám.");
-
-            try
-            {
-                exam.ConfirmDiagnosis(request.DoctorNotes, request.FinalDiagnosis);
-                await _context.SaveChangesAsync();
-                return Ok(new { Message = "Bác sĩ đã duyệt thành công" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
-            }
-        }
-    }
-
-    // --- DTOs ---
-    public class CreateExaminationRequest
-    {
-        public Guid PatientId { get; set; }
-        public Guid ImageId { get; set; }
-        public string Diagnosis { get; set; } = string.Empty;
-        public string DoctorNotes { get; set; } = string.Empty;
-        public Guid DoctorId { get; set; }
     }
 }

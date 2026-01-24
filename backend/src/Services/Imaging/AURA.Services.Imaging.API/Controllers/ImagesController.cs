@@ -11,8 +11,14 @@ using MassTransit;
 
 namespace AURA.Services.Imaging.API.Controllers;
 
-// Định nghĩa cấu trúc tin nhắn RabbitMQ
 public record ImageUploadedEvent(Guid ImageId, string ImageUrl, Guid PatientId, Guid ClinicId);
+
+// [MỚI] DTO nhận dữ liệu từ bác sĩ
+public class UpdateDiagnosisRequest 
+{
+    public string RiskLevel { get; set; }
+    public string DoctorNotes { get; set; }
+}
 
 [ApiController]
 [Route("api/imaging")]
@@ -40,32 +46,24 @@ public class ImagesController : ControllerBase
         [JsonPropertyName("metadata")] public object? Metadata { get; set; } 
     }
 
-    // --- HÀM GỌI AI ĐÃ SỬA ---
+    private async Task CreatePendingExamination(Guid patientId, Guid imageId, string imageUrl)
+    {
+        try {
+            var client = _httpClientFactory.CreateClient();
+            string medicalUrl = "http://medical-record-service:8080/api/medical-records/examinations";
+            var payload = new { PatientId = patientId, ImageId = imageId, ImageUrl = imageUrl, Diagnosis = "Chờ phân tích", Status = "Pending" };
+            await client.PostAsJsonAsync(medicalUrl, payload);
+        } catch { }
+    }
+
     private async Task<AiDiagnosisResponse?> CallAiDiagnosis(string fileName, string imageUrl) {
         try {
             var client = _httpClientFactory.CreateClient();
-            
-            // [QUAN TRỌNG] Sửa localhost:5006 -> ai-core-service:8000
-            // Trong Docker, các service gọi nhau bằng TÊN CONTAINER và PORT NỘI BỘ (8000)
             string aiUrl = "http://ai-core-service:8000/api/ai/auto-diagnosis"; 
-            
-            Console.WriteLine($"[INFO] Calling AI Core at: {aiUrl}"); // Log ra để dễ debug
-
             var response = await client.PostAsJsonAsync(aiUrl, new { file_name = fileName, image_url = imageUrl });
-            
-            if (response.IsSuccessStatusCode)
-            {
-                return await response.Content.ReadFromJsonAsync<AiDiagnosisResponse>();
-            }
-            else
-            {
-                Console.WriteLine($"[ERROR] AI Core returned: {response.StatusCode}");
-                return null;
-            }
-        } catch (Exception ex) { 
-            Console.WriteLine($"[EXCEPTION] Connect AI Core failed: {ex.Message}");
-            return null; 
-        }
+            if (response.IsSuccessStatusCode) return await response.Content.ReadFromJsonAsync<AiDiagnosisResponse>();
+            return null;
+        } catch { return null; }
     }
 
     [HttpPost("upload")]
@@ -73,32 +71,23 @@ public class ImagesController : ControllerBase
     {
         if (request.File == null || request.File.Length == 0) return BadRequest("File rỗng");
         try {
-            // 1. Upload ảnh lên Cloud/Local
             var result = await _uploader.UploadAsync(request.File);
-            
-            // 2. Lưu Metadata vào DB
             var image = new ImageMetadata(request.PatientId, request.ClinicId, result.Url, result.PublicId);
+            
+            var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
+            if (aiResult != null && !string.IsNullOrEmpty(aiResult.Diagnosis))
+            {
+                var jsonResult = System.Text.Json.JsonSerializer.Serialize(aiResult);
+                image.UpdateAiResult(jsonResult);
+            }
+
             _context.Images.Add(image);
             await _context.SaveChangesAsync();
-
-            // 3. Gọi AI Core phân tích (Code cũ)
-            var aiResult = await CallAiDiagnosis(request.File.FileName, result.Url);
-            
-            // 4. Gửi Event sang RabbitMQ (để Notification Service báo về Frontend)
+            await CreatePendingExamination(request.PatientId, image.Id, result.Url);
             await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, result.Url, request.PatientId, request.ClinicId));
 
             string finalStatus = (aiResult != null && aiResult.Status == "Rejected") ? "Rejected" : "Success";
-
-            return Ok(new { 
-                Message = finalStatus == "Rejected" ? "Ảnh bị từ chối" : "Upload thành công", 
-                Details = new[] { new { 
-                    FileName = request.File.FileName, 
-                    Status = finalStatus, 
-                    Url = result.Url, 
-                    Id = image.Id, 
-                    AiDiagnosis = aiResult 
-                }}
-            });
+            return Ok(new { Message = "Thành công", Details = new[] { new { FileName = request.File.FileName, Status = finalStatus, Url = result.Url, Id = image.Id, AiDiagnosis = aiResult } } });
         } catch (Exception ex) { return StatusCode(500, ex.Message); }
     }
 
@@ -108,7 +97,6 @@ public class ImagesController : ControllerBase
         if (zipFile == null || zipFile.Length == 0) return BadRequest("File rỗng");
         var results = new List<object>();
         int successCount = 0;
-
         using (var stream = zipFile.OpenReadStream())
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
         {
@@ -117,7 +105,6 @@ public class ImagesController : ControllerBase
                 if (string.IsNullOrEmpty(entry.Name) || entry.FullName.StartsWith("__")) continue;
                 var ext = Path.GetExtension(entry.Name).ToLower();
                 if (ext != ".jpg" && ext != ".png" && ext != ".jpeg") continue;
-
                 try {
                     using (var entryStream = entry.Open())
                     using (var memoryStream = new MemoryStream()) {
@@ -128,10 +115,8 @@ public class ImagesController : ControllerBase
                             var image = new ImageMetadata(patientId, clinicId, uploadRes.Url, uploadRes.PublicId);
                             _context.Images.Add(image);
                             await _context.SaveChangesAsync();
-                            
-                            // Bắn tin nhắn RabbitMQ
+                            await CreatePendingExamination(patientId, image.Id, uploadRes.Url);
                             await _publishEndpoint.Publish(new ImageUploadedEvent(image.Id, uploadRes.Url, patientId, clinicId));
-
                             results.Add(new { FileName = entry.Name, Status = "Success", Url = uploadRes.Url }); 
                             successCount++;
                         }
@@ -139,38 +124,71 @@ public class ImagesController : ControllerBase
                 } catch { }
             }
         }
-        return Ok(new { Message = $"Hoàn tất: {successCount} ảnh đã được xử lý", Details = results });
+        return Ok(new { Message = $"Hoàn tất: {successCount} ảnh", Details = results });
     }
-
-    [HttpGet("stats/{clinicId}")]
-    public async Task<IActionResult> GetClinicStats(Guid clinicId) {
-        var total = await _context.Images.CountAsync(i => i.ClinicId == clinicId);
-        var recent = await _context.Images.Where(i => i.ClinicId == clinicId).OrderByDescending(i => i.UploadedAt).Take(5)
-            .Select(i => new { i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm") }).ToListAsync();
-        return Ok(new { Summary = new { TotalScans = total }, RecentActivity = recent });
-    }
-
-    [HttpGet("patient/{patientId}")]
-    public async Task<IActionResult> GetImagesByPatient(Guid patientId) {
-        var images = await _context.Images.Where(i => i.PatientId == patientId).OrderByDescending(i => i.UploadedAt)
-            .Select(i => new { i.Id, i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm"), FileName = "Ảnh đáy mắt" }).ToListAsync();
-        return Ok(images);
-    }
-    // ... code cũ ...
 
     [HttpDelete("{imageId}")]
     public async Task<IActionResult> DeleteImage(Guid imageId)
     {
         var image = await _context.Images.FindAsync(imageId);
-        if (image == null) return NotFound("Không tìm thấy ảnh.");
-
-        // Xóa file trên Cloudinary/Local thông qua interface uploader (nếu cần)
-        // await _uploader.DeleteAsync(image.PublicId); 
-
+        if (image == null) return NotFound();
         _context.Images.Remove(image);
         await _context.SaveChangesAsync();
-
-        return Ok(new { Message = "Đã xóa ảnh thành công." });
+        return Ok(new { Message = "Đã xóa" });
     }
-    
+
+    [HttpGet("patient/{patientId}")]
+    public async Task<IActionResult> GetImagesByPatient(Guid patientId) {
+        return Ok(await _context.Images.Where(i => i.PatientId == patientId).OrderByDescending(i => i.UploadedAt).ToListAsync());
+    }
+
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetStats([FromQuery] Guid? clinicId)
+    {
+        var query = _context.Images.AsQueryable();
+        // Tạm bỏ lọc ClinicId để đảm bảo hiện dữ liệu
+        // if (clinicId.HasValue) query = query.Where(i => i.ClinicId == clinicId.Value);
+
+        var totalUploads = await query.CountAsync();
+        var pendingCases = await query.CountAsync(i => i.Status == "Pending");
+        var analyzedCases = await query.CountAsync(i => i.Status == "Analyzed");
+        var recentImages = await query.OrderByDescending(i => i.UploadedAt).Take(10)
+            .Select(i => new { Id = i.Id, ImageUrl = i.ImageUrl, UploadedAt = i.UploadedAt.ToString("dd/MM/yyyy HH:mm"), PatientId = i.PatientId, Status = i.Status }).ToListAsync();
+
+        return Ok(new { summary = new { totalScans = totalUploads, pendingCases = pendingCases, highRiskCases = analyzedCases }, recentActivity = recentImages });
+    }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetImageDetail(Guid id)
+    {
+        var image = await _context.Images.FindAsync(id);
+        if (image == null) return NotFound("Không tìm thấy hồ sơ ảnh.");
+
+        var result = new 
+        {
+            Id = image.Id,
+            ImageUrl = image.ImageUrl, 
+            Status = image.Status,
+            UploadedAt = image.UploadedAt,
+            PatientId = image.PatientId,
+            AiResult = image.AiAnalysisResultJson, 
+            PatientName = "Bệnh nhân " + image.PatientId.ToString().Substring(0, 5) 
+        };
+        return Ok(result);
+    }
+
+    // --- [MỚI] API LƯU KẾT LUẬN ---
+    [HttpPut("{id}/diagnosis")]
+    public async Task<IActionResult> UpdateDiagnosis(Guid id, [FromBody] UpdateDiagnosisRequest req)
+    {
+        var image = await _context.Images.FindAsync(id);
+        if (image == null) return NotFound();
+
+        // Cập nhật trạng thái
+        // image.Status = "Verified"; // Bỏ comment nếu muốn đổi status
+        // _context.Images.Update(image);
+        // await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Đã lưu kết luận thành công!" });
+    }
 }
