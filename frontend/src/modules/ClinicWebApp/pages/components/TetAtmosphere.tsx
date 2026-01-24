@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
-const TetAtmosphere = () => {
-  const [isPlaying, setIsPlaying] = useState(true);
+const TetAtmosphere: React.FC = () => {
+  const [isPlaying, setIsPlaying] = useState<boolean>(true);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -39,16 +39,17 @@ const TetAtmosphere = () => {
         document.head.appendChild(style);
     }
 
-    const gradients = [
+    const gradients: string[] = [
       'linear-gradient(120deg, rgba(255, 183, 197, 0.9), rgba(255, 197, 208, 0.9))',
       'linear-gradient(120deg, rgba(255,189,189), rgba(227,170,181))',
       'linear-gradient(120deg, rgba(212,152,163), rgba(242,185,196))'
     ];
 
-    const createPetal = () => {
+    const createPetal = (): void => {
       const petal = document.createElement('div');
       petal.className = 'tet-petal';
-      petal.style.left = Math.random() * 100 + 'vw';
+      const leftPos = Math.random() * 100;
+      petal.style.left = leftPos + 'vw';
       
       const size = Math.random() * 10 + 15;
       petal.style.width = size + 'px';

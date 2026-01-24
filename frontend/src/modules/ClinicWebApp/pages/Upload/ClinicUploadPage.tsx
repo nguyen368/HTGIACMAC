@@ -1,30 +1,82 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, ChangeEvent } from "react";
 import { useNavigate } from 'react-router-dom';
+// @ts-ignore
 import imagingApi from "../../../../api/imagingApi"; 
+// @ts-ignore
 import medicalApi from "../../../../api/medicalApi"; 
+// @ts-ignore
 import authApi from "../../../../api/authApi"; 
 import "./ClinicUploadPage.css"; 
 
-const ClinicUploadPage = () => {
+// --- Interfaces ---
+interface Patient {
+  id: string;
+  fullName?: string;
+  userName?: string;
+  email?: string;
+}
+
+interface UploadResult {
+  fileName: string;
+  status: string;
+  Id?: string;
+  id?: string;
+  Url?: string;
+  url?: string;
+  error?: string;
+  aiNote?: string;
+  aiDiagnosis?: {
+    risk_score?: number;
+    riskScore?: number;
+    risk_level?: string;
+    riskLevel?: string;
+    status?: string;
+    heatmap_url?: string;
+    heatmap?: string;
+    diagnosis?: string;
+    result?: string;
+  };
+}
+
+interface ImageItem {
+  id: string;
+  fileName: string;
+  imageUrl: string;
+}
+
+interface RecentActivity {
+  uploadedAt: string;
+  imageUrl: string;
+}
+
+interface SystemStats {
+  summary?: {
+    totalScans: number;
+  };
+  recentActivity?: RecentActivity[];
+}
+
+const ClinicUploadPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState("upload"); 
-  const [activeUploadMode, setActiveUploadMode] = useState("single"); 
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [uploadResults, setUploadResults] = useState([]); 
-  const [stats, setStats] = useState(null); 
-  const [patientImages, setPatientImages] = useState([]); 
-  const [isLoadingImages, setIsLoadingImages] = useState(false);
-  const [patients, setPatients] = useState([]);
-  const [selectedPatientId, setSelectedPatientId] = useState("");
+  const [activeTab, setActiveTab] = useState<string>("upload"); 
+  const [activeUploadMode, setActiveUploadMode] = useState<string>("single"); 
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [uploadResults, setUploadResults] = useState<UploadResult[]>([]); 
+  const [stats, setStats] = useState<SystemStats | null>(null); 
+  const [patientImages, setPatientImages] = useState<ImageItem[]>([]); 
+  const [isLoadingImages, setIsLoadingImages] = useState<boolean>(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string>("");
 
   const CURRENT_CLINIC_ID = "d2b51336-6c1c-426d-881e-45051666617a";
 
   const fetchPatients = useCallback(async () => {
     try {
         const res = await authApi.getAllPatients();
-        const data = res.value || res.data?.value || res;
+        // AxiosResponse trả về dữ liệu trong .data
+        const data = res.data?.value || res.data || [];
         const patientList = Array.isArray(data) ? data : [];
         setPatients(patientList);
         if (patientList.length > 0 && !selectedPatientId) {
@@ -37,7 +89,8 @@ const ClinicUploadPage = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const data = await imagingApi.getStats(CURRENT_CLINIC_ID);
+      // [FIX LỖI TS 2345]: Ép kiểu any vì imagingApi.js interceptor trả về data nhưng TS hiểu là AxiosResponse
+      const data: any = await imagingApi.getStats(CURRENT_CLINIC_ID);
       setStats(data);
     } catch (error) { console.error("Lỗi tải thống kê:", error); }
   }, [CURRENT_CLINIC_ID]);
@@ -67,8 +120,8 @@ const ClinicUploadPage = () => {
     }
   }, [activeTab, selectedPatientId, fetchPatientImages]);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files ? e.target.files[0] : null;
     if (file) setSelectedFile(file);
   };
 
@@ -78,13 +131,17 @@ const ClinicUploadPage = () => {
     setLoading(true);
     setUploadResults([]); 
     try {
-      let res;
+      // [FIX LỖI TS 2339]: Ép kiểu any cho biến res
+      let res: any;
+      
       if (activeUploadMode === 'batch') {
           res = await imagingApi.batchUpload(selectedFile, CURRENT_CLINIC_ID, selectedPatientId);
       } else {
           res = await imagingApi.uploadSingle(selectedFile, CURRENT_CLINIC_ID, selectedPatientId);
       }
-      const details = res.details || res.Details || [];
+      
+      // Vì res là any, TS sẽ không báo lỗi khi truy cập .details hay .Details
+      const details: UploadResult[] = res.details || res.Details || [];
       setUploadResults(details);
       
       if (activeUploadMode === 'single' && details.length > 0) {
@@ -94,19 +151,19 @@ const ClinicUploadPage = () => {
       }
       
       fetchStats(); 
-    } catch (err) {
+    } catch (err: any) {
       alert("❌ Lỗi hệ thống: " + (err.message || "Unknown"));
     } finally { setLoading(false); }
   };
 
-  const handleDeleteImage = async (imageId) => {
+  const handleDeleteImage = async (imageId: string) => {
       if(!window.confirm("Xác nhận xóa ảnh này?")) return;
       try {
           await imagingApi.deleteImage(imageId);
           alert("Đã xóa thành công.");
           fetchPatientImages();
           fetchStats();
-      } catch (error) { alert("Lỗi khi xóa: " + error.message); }
+      } catch (error: any) { alert("Lỗi khi xóa: " + error.message); }
   }
 
   const renderPatientSelector = () => (
@@ -265,7 +322,7 @@ const ClinicUploadPage = () => {
                                                                 src={item.aiDiagnosis.heatmap_url || item.aiDiagnosis.heatmap} 
                                                                 alt="AI Heatmap" 
                                                                 style={{ width: '100%', borderRadius: '6px', maxHeight: '300px', objectFit: 'contain', display: 'block' }} 
-                                                                onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/400x300?text=Heatmap+Loading..."; }}
+                                                                onError={(e) => { const target = e.target as HTMLImageElement; target.onerror = null; target.src = "https://via.placeholder.com/400x300?text=Heatmap+Loading..."; }}
                                                             />
                                                         )}
                                                     </div>

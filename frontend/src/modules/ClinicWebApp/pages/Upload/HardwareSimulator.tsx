@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
 import medicalApi from '../../../../api/medicalApi';
 
-const HardwareSimulator = () => {
-    const [deviceId, setDeviceId] = useState("AURA-CAM-01");
-    const [patientId, setPatientId] = useState("");
-    const [file, setFile] = useState(null);
-    const [preview, setPreview] = useState(null); // Bổ sung: Xem trước ảnh
-    const [log, setLog] = useState("");
-    const [isUploading, setIsUploading] = useState(false); // Bổ sung: Trạng thái loading
+const HardwareSimulator: React.FC = () => {
+    const [deviceId, setDeviceId] = useState<string>("AURA-CAM-01");
+    const [patientId, setPatientId] = useState<string>("");
+    const [file, setFile] = useState<File | null>(null);
+    const [preview, setPreview] = useState<string | null>(null); // Bổ sung: Xem trước ảnh
+    const [log, setLog] = useState<string>("");
+    const [isUploading, setIsUploading] = useState<boolean>(false); // Bổ sung: Trạng thái loading
 
     // Tạo ảnh xem trước khi chọn file
     useEffect(() => {
@@ -44,7 +45,7 @@ const HardwareSimulator = () => {
             
             // Tự động xóa file sau khi gửi thành công để tránh gửi nhầm
             setFile(null); 
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
             setLog(prev => prev + `\n❌ [ERROR] Connection failed: ${err.message}`);
         } finally {
@@ -87,7 +88,7 @@ const HardwareSimulator = () => {
                                     type="file" 
                                     className="form-control" 
                                     accept="image/*"
-                                    onChange={e => setFile(e.target.files[0])} 
+                                    onChange={e => setFile(e.target.files ? e.target.files[0] : null)} 
                                 />
                             </div>
                         </div>

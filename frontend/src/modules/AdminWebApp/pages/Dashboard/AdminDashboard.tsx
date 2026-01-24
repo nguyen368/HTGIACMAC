@@ -1,18 +1,42 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios"; // Hoặc dùng api client riêng
-import { Bar } from "react-chartjs-2"; // Cần cài chart.js: npm install chart.js react-chartjs-2
+import axios from "axios";
+import { Bar } from "react-chartjs-2";
 import "chart.js/auto";
 
-const AdminDashboard = () => {
-  const [stats, setStats] = useState(null);
-  const [chartData, setChartData] = useState(null);
+// Định nghĩa cấu trúc dữ liệu cho Thống kê
+interface SystemStats {
+  totalPatients: number;
+  pendingExams: number;
+  highRiskCases: number;
+  completedToday: number;
+}
+
+// Định nghĩa cấu trúc dữ liệu cho Doanh thu từ API
+interface RevenueItem {
+  date: string;
+  totalAmount: number;
+}
+
+// Định nghĩa cấu trúc cho Chart Data
+interface ChartData {
+  labels: string[];
+  datasets: {
+    label: string;
+    data: number[];
+    backgroundColor: string;
+    borderRadius: number;
+  }[];
+}
+
+const AdminDashboard: React.FC = () => {
+  const [stats, setStats] = useState<SystemStats | null>(null);
+  const [chartData, setChartData] = useState<ChartData | null>(null);
 
   useEffect(() => {
     // 1. Gọi API Thống kê tổng quan (Medical Service)
-    const fetchStats = async () => {
+    const fetchStats = async (): Promise<void> => {
       try {
-        // Lưu ý: Gọi qua Gateway Port 80
-        const res = await axios.get("http://localhost:80/api/medical-records/examinations/stats");
+        const res = await axios.get<SystemStats>("http://localhost:80/api/medical-records/examinations/stats");
         setStats(res.data);
       } catch (err) {
         console.error(err);
@@ -20,10 +44,10 @@ const AdminDashboard = () => {
     };
 
     // 2. Gọi API Biểu đồ doanh thu (Billing Service)
-    const fetchRevenue = async () => {
+    const fetchRevenue = async (): Promise<void> => {
       try {
-        const res = await axios.get("http://localhost:80/api/billing/admin/revenue-chart");
-        const data = res.data; // [{ date: '...', totalAmount: 100000 }]
+        const res = await axios.get<RevenueItem[]>("http://localhost:80/api/billing/admin/revenue-chart");
+        const data = res.data; 
         
         setChartData({
           labels: data.map(d => new Date(d.date).toLocaleDateString()),

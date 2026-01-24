@@ -1,42 +1,64 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+// @ts-ignore
 import medicalApi from '../../../../api/medicalApi'; 
+// @ts-ignore
 import { useAuth } from '../../../../context/AuthContext'; 
 import './ClinicExamDetail.css';
 
-const ClinicExamDetail = () => {
-  const { id } = useParams(); // Lấy Examination ID từ URL
+// Định nghĩa Interface cho dữ liệu chi tiết ca khám (bao gồm cả thông tin AI)
+interface ExamDetail {
+  patientName: string;
+  age: number;
+  gender: string;
+  examDate: string;
+  status: string;
+  imageUrl: string;
+  heatmapUrl?: string;
+  aiDiagnosis?: string;
+  aiRiskLevel?: 'High' | 'Low' | 'Medium' | string;
+  aiRiskScore?: number;
+  diagnosisResult?: string;
+  doctorNotes?: string;
+}
+
+interface User {
+  id: string;
+  name?: string;
+  role?: string;
+}
+
+const ClinicExamDetail: React.FC = () => {
+  const { id } = useParams<{ id: string }>(); // Lấy Examination ID từ URL
   const navigate = useNavigate();
-  const { user } = useAuth(); 
+  const { user } = useAuth() as { user: User | null }; 
 
   // State dữ liệu
-  const [exam, setExam] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [exam, setExam] = useState<ExamDetail | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // State Viewer
-  const [scale, setScale] = useState(1);
-  const [showHeatmap, setShowHeatmap] = useState(true); // Mặc định bật AI Heatmap
+  const [scale, setScale] = useState<number>(1);
+  const [showHeatmap, setShowHeatmap] = useState<boolean>(true); // Mặc định bật AI Heatmap
 
   // State Form Input
-  const [diagnosis, setDiagnosis] = useState("");
-  const [notes, setNotes] = useState("");
+  const [diagnosis, setDiagnosis] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
 
   // Load dữ liệu từ Backend
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        if (!id) return; // SỬA LỖI: Kiểm tra id tồn tại
+
         // Gọi API lấy chi tiết (Bao gồm thông tin BN, Ảnh, Kết quả AI)
         const data = await medicalApi.getExaminationDetail(id);
         
         setExam(data);
         
-        // Điền sẵn dữ liệu nếu đã có (hoặc lấy từ AI gợi ý)
         if (data.diagnosisResult) {
-            setDiagnosis(data.diagnosisResult); // Nếu bác sĩ đã lưu trước đó
-        } else if (data.aiDiagnosis) {
-            // Nếu chưa, gợi ý từ AI (nhưng không set cứng, để bác sĩ chọn)
-            // setDiagnosis(data.aiDiagnosis); 
+            setDiagnosis(data.diagnosisResult); 
         }
 
         if (data.doctorNotes) setNotes(data.doctorNotes);
@@ -44,7 +66,7 @@ const ClinicExamDetail = () => {
       } catch (error) {
         console.error("Lỗi tải dữ liệu:", error);
         alert("Không tìm thấy dữ liệu ca khám!");
-        navigate('/clinic/queue'); // Quay về danh sách chờ
+        navigate('/clinic/queue'); 
       } finally {
         setLoading(false);
       }
@@ -62,8 +84,7 @@ const ClinicExamDetail = () => {
   const handleSave = async () => {
     if (!diagnosis) return alert("Vui lòng chọn kết luận bệnh!");
 
-    // Xác nhận nếu kết quả khác AI (CDS Logic)
-    if (exam.aiRiskLevel === 'High' && diagnosis === 'Bình thường') {
+    if (exam?.aiRiskLevel === 'High' && diagnosis === 'Bình thường') {
         if (!window.confirm("⚠️ CẢNH BÁO AI:\nCa này có nguy cơ cao, bạn chắc chắn muốn kết luận 'Bình thường'?")) {
             return;
         }
@@ -77,13 +98,13 @@ const ClinicExamDetail = () => {
             doctorId: user?.id || "00000000-0000-0000-0000-000000000000"
         };
 
-        // Gọi API Verify
-        await medicalApi.verifyDiagnosis(id, payload);
+        if (id) {
+            await medicalApi.verifyDiagnosis(id, payload);
+            alert("✅ Đã lưu kết quả & Gửi thông báo cho bệnh nhân!");
+            navigate('/clinic/queue'); 
+        }
 
-        alert("✅ Đã lưu kết quả & Gửi thông báo cho bệnh nhân!");
-        navigate('/clinic/queue'); 
-
-    } catch (error) {
+    } catch (error: any) {
         console.error("Lỗi lưu:", error);
         alert("Lỗi: " + (error.response?.data?.Error || error.message));
     } finally {
@@ -93,10 +114,10 @@ const ClinicExamDetail = () => {
 
   const handlePrintReport = async () => {
       try {
+          if (!id) return;
           const report = await medicalApi.getReportData(id);
           console.log("Report Data:", report);
           alert(`🖨️ Đang in phiếu kết quả...\n(Traceability: ${report.technicalTraceability.systemName})`);
-          // Logic mở cửa sổ in PDF ở đây
       } catch (err) {
           alert("Không thể tải dữ liệu báo cáo.");
       }
@@ -127,13 +148,9 @@ const ClinicExamDetail = () => {
         </div>
 
         <div className="image-wrapper" style={{ transform: `scale(${scale})` }}>
-          {/* Layer 1: Ảnh gốc */}
           <img src={exam.imageUrl} alt="Original" className="main-image" />
-          
-          {/* Layer 2: Heatmap (Đè lên) */}
           {showHeatmap && exam.heatmapUrl && (
             <img 
-                // URL trả về từ Backend là đường dẫn tương đối (/static/...), cần thêm domain API Gateway
                 src={`http://localhost:80${exam.heatmapUrl}`} 
                 alt="Heatmap" 
                 className="heatmap-overlay" 
@@ -150,7 +167,6 @@ const ClinicExamDetail = () => {
             <p className="mb-1"><strong>Tuổi:</strong> {exam.age} | <strong>Giới tính:</strong> {exam.gender}</p>
             <p className="text-muted"><small>Ngày chụp: {new Date(exam.examDate).toLocaleString()}</small></p>
             
-            {/* AI Result Box */}
             <div className={`ai-result-box ${exam.aiRiskLevel === 'High' ? 'danger' : 'safe'}`}>
                 <h5>🤖 Phân tích AI:</h5>
                 <p><strong>Đánh giá:</strong> {exam.aiDiagnosis || "Chưa có kết quả"}</p>
@@ -176,7 +192,7 @@ const ClinicExamDetail = () => {
                 <label className="fw-bold">Ghi chú / Y lệnh:</label>
                 <textarea 
                     className="form-control"
-                    rows="4"
+                    rows={4}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Nhập ghi chú chi tiết..."

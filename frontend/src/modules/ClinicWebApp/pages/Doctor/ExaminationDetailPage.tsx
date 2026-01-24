@@ -1,25 +1,42 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+// @ts-ignore
 import medicalApi from "../../../../api/medicalApi";
 import "../Upload/ClinicUploadPage.css"; 
 
-const ExaminationDetailPage = () => {
-  const { id } = useParams();
+// Định nghĩa Interface cho đối tượng Examination
+interface Examination {
+  id: string;
+  patientName?: string;
+  PatientName?: string; 
+  age?: number;
+  Age?: number;
+  status: string;
+  imageUrl?: string;
+  diagnosisResult?: string;
+  doctorNotes?: string;
+}
+
+const ExaminationDetailPage: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
-  const [exam, setExam] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [exam, setExam] = useState<Examination | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   
   // Form input
-  const [diagnosis, setDiagnosis] = useState("");
-  const [doctorNotes, setDoctorNotes] = useState("");
-  const [aiOverlay, setAiOverlay] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<string>("");
+  const [doctorNotes, setDoctorNotes] = useState<string>("");
+  const [aiOverlay, setAiOverlay] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchExamData = async () => {
         try {
-            // GỌI API THẬT
-            const data = await medicalApi.getExaminationById(id);
+            // [FIX LỖI TS 2345]: Kiểm tra id tồn tại trước khi gọi API
+            if (!id) return;
+
+            // GỌI API THẬT (Ép kiểu id as string vì đã check !id ở trên)
+            const data = await medicalApi.getExaminationById(id as string);
             setExam(data);
             
             // Nếu đã có kết quả cũ, điền sẵn vào form
@@ -45,12 +62,13 @@ const ExaminationDetailPage = () => {
               doctorNotes: doctorNotes
           };
           
-          // GỌI API LƯU VÀO DB
-          await medicalApi.updateDiagnosis(id, payload);
-          
-          alert("✅ Đã lưu kết quả vào Database thành công!");
-          navigate("/clinic/doctor-queue"); 
-      } catch (err) {
+          // [FIX LỖI TS]: Kiểm tra id
+          if (id) {
+            await medicalApi.updateDiagnosis(id as string, payload);
+            alert("✅ Đã lưu kết quả vào Database thành công!");
+            navigate("/clinic/doctor-queue"); 
+          }
+      } catch (err: any) {
           console.error(err);
           alert("Lỗi khi lưu: " + (err.response?.data || err.message));
       }
