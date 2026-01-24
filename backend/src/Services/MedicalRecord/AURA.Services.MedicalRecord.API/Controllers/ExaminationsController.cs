@@ -23,7 +23,15 @@ namespace AURA.Services.MedicalRecord.API.Controllers
             _publishEndpoint = publishEndpoint;
         }
 
+<<<<<<< HEAD
+        // =========================================================================
+        // PHẦN 1: API CHO CLINIC WEB (SỬA LỖI PROPERTY)
+        // =========================================================================
+
+        // [POST] Tạo mới/Lưu kết quả khám
+=======
         // 1. Tạo ca khám mới (Giữ nguyên logic của bạn)
+>>>>>>> 7d68b20f0738f90995a124216dde00831c1ce63d
         [HttpPost]
         public async Task<IActionResult> CreateExamination([FromBody] CreateExaminationRequest request)
         {
@@ -44,7 +52,11 @@ namespace AURA.Services.MedicalRecord.API.Controllers
             return Ok(new { Message = "Đã lưu kết quả khám thành công", Id = examination.Id });
         }
 
+<<<<<<< HEAD
+        // [GET] Lấy chi tiết ca khám - FIX LỖI AiDiagnosis
+=======
         // 2. Lấy chi tiết ca khám (Đầy đủ thông tin cho UI)
+>>>>>>> 7d68b20f0738f90995a124216dde00831c1ce63d
         [HttpGet("{id}")]
         public async Task<IActionResult> GetExaminationById(Guid id)
         {
@@ -58,6 +70,7 @@ namespace AURA.Services.MedicalRecord.API.Controllers
 
             return Ok(new {
                 exam.Id,
+                exam.PatientId,
                 PatientName = exam.Patient?.FullName ?? "Unknown",
                 Age = age,
                 Gender = exam.Patient?.Gender ?? "Unknown",
@@ -65,6 +78,31 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 exam.Status,
                 exam.ExamDate,
                 exam.DoctorNotes,
+<<<<<<< HEAD
+                DiagnosisResult = exam.Diagnosis // Sử dụng trường Diagnosis chính
+                // Nếu Entity của bạn có trường AI riêng, hãy đổi thành exam.TenTruongDo
+            });
+        }
+
+        // [GET] Danh sách chờ khám
+        [HttpGet("queue")]
+        public async Task<IActionResult> GetExaminationQueue([FromQuery] string? searchTerm)
+        {
+            var query = _context.Examinations
+                .Include(e => e.Patient)
+                .Where(e => e.Status == "Pending" || e.Status == "Analyzed" || e.Status == "Verified")
+                .AsNoTracking();
+
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                query = query.Where(e => e.Patient.FullName.Contains(searchTerm) || e.Id.ToString().Contains(searchTerm));
+            }
+
+            var results = await query
+                .OrderByDescending(e => e.ExamDate)
+                .Select(e => new ExaminationQueueDto
+                {
+=======
                 // Ưu tiên kết quả chẩn đoán của bác sĩ nếu đã Verified, ngược lại lấy gợi ý từ AI
                 DiagnosisResult = exam.Status == "Verified" ? exam.Diagnosis : exam.AiDiagnosis,
                 exam.AiRiskScore,
@@ -133,6 +171,7 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 .OrderByDescending(e => e.AiRiskScore) 
                 .ThenBy(e => e.ExamDate)
                 .Select(e => new ExaminationQueueDto {
+>>>>>>> 7d68b20f0738f90995a124216dde00831c1ce63d
                     Id = e.Id,
                     PatientId = e.PatientId,
                     PatientName = e.Patient != null ? e.Patient.FullName : "Unknown",
@@ -145,10 +184,53 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 })
                 .ToListAsync();
 
+<<<<<<< HEAD
+            return Ok(results);
+        }
+
+        // [GET] Thống kê Dashboard
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetStats()
+        {
+            var today = DateTime.UtcNow.Date;
+            var totalPatients = await _context.Patients.CountAsync();
+            var pendingExams = await _context.Examinations.CountAsync(e => e.Status == "Pending");
+            var completedToday = await _context.Examinations.CountAsync(e => e.Status == "Verified" && e.ExamDate >= today);
+            var highRisk = await _context.Examinations.CountAsync(e => e.Diagnosis != "Bình thường" && !string.IsNullOrEmpty(e.Diagnosis));
+
+            return Ok(new { TotalPatients = totalPatients, PendingExams = pendingExams, CompletedToday = completedToday, HighRiskCases = highRisk });
+        }
+
+        // [PUT] Xác thực hồ sơ (Dùng method ConfirmDiagnosis có sẵn của bạn)
+        [HttpPut("{id}/verify")]
+        public async Task<IActionResult> VerifyExamination(Guid id, [FromBody] ConfirmDiagnosisRequest request)
+        {
+            var exam = await _context.Examinations.FindAsync(id);
+            if (exam == null) return NotFound("Không tìm thấy ca khám.");
+
+            try
+            {
+                // Gọi method nghiệp vụ đã có trong Entity Examination
+                exam.ConfirmDiagnosis(request.DoctorNotes, request.FinalDiagnosis);
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = "Bác sĩ đã duyệt thành công" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
+            }
+        }
+
+        // =========================================================================
+        // PHẦN 2: API CŨ (GIỮ NGUYÊN)
+        // =========================================================================
+
+=======
             return Ok(result);
         }
 
         // 5. Tạo dữ liệu giả (Giữ nguyên logic của bạn phục vụ Test)
+>>>>>>> 7d68b20f0738f90995a124216dde00831c1ce63d
         [HttpPost("fake")]
         public async Task<IActionResult> CreateFakeData(Guid patientId)
         {
@@ -164,11 +246,20 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         {
             var exam = await _context.Examinations.FindAsync(id);
             if (exam == null) return NotFound("Không tìm thấy ca khám.");
+<<<<<<< HEAD
+=======
 
+>>>>>>> 7d68b20f0738f90995a124216dde00831c1ce63d
             try {
                 exam.UpdateAiResult(aiResult);
                 await _context.SaveChangesAsync();
                 return Ok(new { Message = "Đã cập nhật AI thành công" });
+<<<<<<< HEAD
+            } catch (Exception ex) {
+                return BadRequest(ex.Message);
+            }
+        }
+=======
             }
             catch (Exception ex) {
                 return BadRequest(new { Error = "Lỗi trạng thái", Detail = ex.Message });
@@ -204,5 +295,6 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 return BadRequest(new { Error = "Lỗi quy trình", Detail = ex.Message });
             }
         }
+>>>>>>> 7d68b20f0738f90995a124216dde00831c1ce63d
     }
 }

@@ -183,7 +183,6 @@ services:
       - ASPNETCORE_URLS=http://+:8080
     ports:
       - "8000:8080"
-    # KHÔNG dùng volumes ocelot.json ở đây vì đã nhúng vào Dockerfile
     depends_on:
       - identity-service
       - medical-record-service
