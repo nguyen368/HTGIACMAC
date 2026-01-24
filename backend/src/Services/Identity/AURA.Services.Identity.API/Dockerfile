@@ -2,9 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# --- SỬA LỖI: Thêm 'backend/' vào trước đường dẫn src ---
-
-# 1. Copy BuildingBlocks
+# 1. Copy BuildingBlocks (Rất quan trọng để tránh lỗi thiếu project reference)
 COPY ["backend/src/BuildingBlocks/AURA.Shared.Kernel/AURA.Shared.Kernel.csproj", "BuildingBlocks/AURA.Shared.Kernel/"]
 COPY ["backend/src/BuildingBlocks/AURA.Shared.Infra/AURA.Shared.Infra.csproj", "BuildingBlocks/AURA.Shared.Infra/"]
 COPY ["backend/src/BuildingBlocks/AURA.Shared.Messaging/AURA.Shared.Messaging.csproj", "BuildingBlocks/AURA.Shared.Messaging/"]
@@ -18,14 +16,13 @@ COPY ["backend/src/Services/Identity/AURA.Services.Identity.Infrastructure/AURA.
 # 3. Restore & Build
 RUN dotnet restore "Services/Identity/API/AURA.Services.Identity.API.csproj"
 COPY . .
-# Lưu ý: Khi COPY . . thì nó copy toàn bộ từ root vào.
-# Chúng ta cần build đúng đường dẫn bên trong container
+
 WORKDIR "/src/backend/src/Services/Identity/AURA.Services.Identity.API"
 RUN dotnet build -c Release -o /app/build
 
 # Stage 2: Publish
 FROM build AS publish
-RUN dotnet publish -c Release -o /app/publish
+RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
 # Stage 3: Final
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final

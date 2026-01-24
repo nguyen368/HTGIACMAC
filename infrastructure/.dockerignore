@@ -1,0 +1,19 @@
+    # Chặn các thư mục cực nặng
+    **/node_modules/
+    **/.git/
+    **/.vscode/
+
+    # Chặn file build của .NET (Imaging, Identity...)
+    **/bin/
+    **/obj/
+
+    # Chặn dữ liệu AI và Ảnh (Thủ phạm gây tốn dung lượng)
+    **/static/results/
+    **/uploads/
+    **/datasets/
+    **/*.weights
+    **/*.h5
+
+    # Các file tạm
+    *.log
+    .env

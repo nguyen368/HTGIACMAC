@@ -5,10 +5,11 @@ import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from typing import Optional
 from prometheus_fastapi_instrumentator import Instrumentator
 from strategies import AIServiceContext, ResNetStrategy
 
-# --- CẤU HÌNH ĐƯỜNG DẪN TUYỆT ĐỐI ---
+# --- CẤU HÌNH ĐƯỜNG DẪN ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = "/app/static"
 RESULT_DIR = os.path.join(STATIC_DIR, "results")
@@ -19,16 +20,17 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 
 app = FastAPI(title="AURA AI Core Service Pro")
 Instrumentator().instrument(app).expose(app)
+# Mount thư mục static để bên ngoài có thể truy cập ảnh kết quả
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 class ImagePayload(BaseModel):
     file_name: str
     image_url: str = ""
+    patient_id: Optional[str] = None # Thêm field này để log ngữ cảnh
 
 def load_image_from_source(payload: ImagePayload):
     if payload.image_url and payload.image_url.startswith("http"):
         try:
-            print(f"--> [AI] Downloading from URL: {payload.image_url}")
             resp = requests.get(payload.image_url, timeout=15)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -40,53 +42,50 @@ def load_image_from_source(payload: ImagePayload):
 
 def check_retina_pro(img):
     """
-    LOGIC TRUY QUÉT NÂNG CAO: Tọa độ X, Y, cấu hình hình học và mật độ mạch máu.
+    LOGIC TRUY QUÉT CỰC HẠN (ULTRA-STRICT): 
+    Giữ nguyên logic kiểm tra y tế của bạn.
     """
     if img is None: return False, "Không đọc được dữ liệu ảnh", None, {}
     
-    # Chuẩn hóa kích thước để phân tích logic
     img_eval = cv2.resize(img, (512, 512))
-    gray = cv2.cvtColor(img_eval, cv2.COLOR_BGR2GRAY)
+    lab = cv2.cvtColor(img_eval, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    img_contrast = cv2.merge((cl,a,b))
+    img_contrast = cv2.cvtColor(img_contrast, cv2.COLOR_LAB2BGR)
+    gray = cv2.cvtColor(img_contrast, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape
 
-    # 1. Tìm vòng tròn võng mạc (Hough Circle) - Xác định tâm X, Y
-    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1.2, 100, 
-                               param1=50, param2=35, minRadius=h//4, maxRadius=h//2)
-    
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1.2, 100, param1=50, param2=45, minRadius=h//4, maxRadius=h//2)
     cx, cy = 0, 0
     if circles is not None:
         circles = np.uint16(np.around(circles))
         cx, cy = int(circles[0, 0][0]), int(circles[0, 0][1])
     else:
-        return False, "Không phát hiện cấu trúc cầu mắt (Ảnh mặt hoặc sai tiêu cự)", img_eval, {}
+        return False, "Hệ thống từ chối: Không phát hiện cấu trúc nhãn cầu chuẩn y tế.", img_eval, {}
 
-    # 2. Kiểm tra mật độ mạch máu (Vessel Density) để loại bỏ ảnh da mặt
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    contrast = clahe.apply(gray)
-    vessels = cv2.adaptiveThreshold(contrast, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    vessels = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    kernel = np.ones((2,2), np.uint8)
+    vessels = cv2.morphologyEx(vessels, cv2.MORPH_OPEN, kernel)
     vessel_density = np.count_nonzero(vessels) / (h * w)
     
-    if vessel_density < 0.01: 
-        return False, "Không chứa đặc điểm mạch máu võng mạc (Ảnh khuôn mặt/da)", img_eval, {"x": cx, "y": cy}
+    if vessel_density < 0.020: 
+        return False, "Hệ thống từ chối: Thiếu đặc điểm mạch máu võng mạc.", img_eval, {"x": cx, "y": cy}
 
-    # 3. Kiểm tra màu sắc (Sắc đỏ y tế)
     avg_color = np.mean(img_eval, axis=(0, 1))
-    if not (avg_color[2] > avg_color[1] * 1.15): 
-        return False, "Sai màu sắc đặc trưng của mô võng mạc", img_eval, {"x": cx, "y": cy}
+    if not (avg_color[2] > avg_color[1] * 1.35): 
+        return False, "Hệ thống từ chối: Màu sắc không chuẩn mô sinh học.", img_eval, {"x": cx, "y": cy}
 
     return True, "Hợp lệ", img_eval, {"x": cx, "y": cy, "vessel_score": round(vessel_density, 4)}
 
-@app.get("/")
-def read_root():
-    return {"status": "Online", "mode": "Strict Validation Enabled"}
-
 @app.post("/api/ai/auto-diagnosis")
 def auto_diagnosis(payload: ImagePayload):
+    print(f"--> [AI START] Analyzing for Patient: {payload.patient_id}")
     try:
         img = load_image_from_source(payload)
         if img is None: return {"status": "Failed", "error": "AI could not load image"}
 
-        # THỰC THI TRUY QUÉT PRO
         is_valid, msg, img_matrix, meta = check_retina_pro(img)
         
         if not is_valid:
@@ -94,12 +93,11 @@ def auto_diagnosis(payload: ImagePayload):
                 "status": "Rejected", 
                 "diagnosis": msg, 
                 "risk_score": 0, 
-                "risk_level": "Invalid", 
+                "risk_level": "None", 
                 "heatmap_url": "",
                 "metadata": meta
             }
 
-        # CHẠY MODEL CHẨN ĐOÁN (Strategy Pattern)
         context = AIServiceContext(ResNetStrategy())
         result = context.execute_analysis(img_matrix)
         risk_score = result.get('risk_percentage', 0)
@@ -110,15 +108,17 @@ def auto_diagnosis(payload: ImagePayload):
             elif risk_score >= 40: risk_level = "Medium"
             else: risk_level = "Low"
 
+        # Save Heatmap
         output_filename = f"heatmap_{payload.file_name}"
         cv2.imwrite(os.path.join(RESULT_DIR, output_filename), result['visualized_overlay'])
 
+        # CẬP NHẬT: Trả về đường dẫn heatmap để Frontend hiển thị
         return {
             "status": "Success",
             "diagnosis": result['diagnosis'],
             "risk_score": risk_score,
             "risk_level": risk_level,
-            "heatmap_url": f"http://localhost:5006/static/results/{output_filename}",
+            "heatmap_url": f"/static/results/{output_filename}",
             "metadata": meta
         }
     except Exception as e:

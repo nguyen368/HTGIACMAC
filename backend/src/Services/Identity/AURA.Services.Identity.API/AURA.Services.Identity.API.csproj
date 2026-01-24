@@ -15,11 +15,17 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="FirebaseAdmin" Version="2.4.0" />
+    
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.2.5" />
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AURA.Services.Identity.Application\AURA.Services.Identity.Application.csproj" />
     <ProjectReference Include="..\AURA.Services.Identity.Infrastructure\AURA.Services.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AURA.Shared.Kernel\AURA.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AURA.Shared.Messaging\AURA.Shared.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

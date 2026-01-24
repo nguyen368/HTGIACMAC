@@ -1,0 +1,56 @@
+{
+  "Routes": [
+    {
+      "DownstreamPathTemplate": "/static/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "ai-core-service", "Port": 8000 } ],
+      "UpstreamPathTemplate": "/api/static/{everything}",
+      "UpstreamHttpMethod": [ "GET", "OPTIONS" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/imaging/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "imaging-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/imaging/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "DELETE", "OPTIONS" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/medical-records/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "medical-record-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/medical-records/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/patients/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "medical-record-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/patients/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/auth/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "identity-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/auth/{everything}",
+      "UpstreamHttpMethod": [ "POST", "GET", "PUT", "OPTIONS" ]
+    },
+    {
+      "DownstreamPathTemplate": "/hubs/notifications/{everything}",
+      "DownstreamScheme": "ws",
+      "DownstreamHostAndPorts": [ { "Host": "notification-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/hubs/notifications/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ]
+    },
+    {
+      "DownstreamPathTemplate": "/hubs/notifications/negotiate",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "notification-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/hubs/notifications/negotiate",
+      "UpstreamHttpMethod": [ "POST", "OPTIONS" ]
+    }
+  ],
+  "GlobalConfiguration": {
+    "BaseUrl": "http://localhost"
+  }
+}

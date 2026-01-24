@@ -1,26 +1,24 @@
 import axios from 'axios';
 
 const axiosClient = axios.create({
-    // Quan trọng: baseURL trỏ vào /api của Gateway (cổng 80)
-    // Trình duyệt sẽ tự điền domain: http://localhost/api
-    baseURL: '/api', 
-    headers: {
-        'Content-Type': 'application/json',
-    },
+  // URL của API Gateway (Ocelot) để điều hướng đến các Microservices
+  baseURL: 'http://localhost:8000/api', 
+  headers: { 
+    'Content-Type': 'application/json' 
+  },
 });
 
-axiosClient.interceptors.request.use((config) => {
-    const token = localStorage.getItem('aura_token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-// Thêm interceptor response để trả về data gọn gàng (giống file cũ của bạn)
+// Xử lý dữ liệu trả về tự động để không phải gọi .data nhiều lần ở tầng giao diện
 axiosClient.interceptors.response.use(
-    (response) => response.data || response, // Ưu tiên trả về data
-    (error) => { throw error; }
+  (response) => {
+    // Nếu API trả về dữ liệu, lấy trực tiếp phần body
+    return response.data;
+  },
+  (error) => {
+    // Xử lý lỗi tập trung nếu cần (ví dụ: mất kết nối, token hết hạn)
+    console.error('API Error:', error.response ? error.response.data : error.message);
+    return Promise.reject(error);
+  }
 );
 
 export default axiosClient;

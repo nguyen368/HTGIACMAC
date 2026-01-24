@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # 1. DATABASE
   aura.db:
@@ -21,7 +23,11 @@ services:
     networks:
       - aura-network
 
+<<<<<<< HEAD
   # 9. RabbitMQ
+=======
+  # 2. RabbitMQ
+>>>>>>> 7d68b20f0738f90995a124216dde00831c1ce63d
   rabbitmq:
     image: rabbitmq:3-management
     container_name: aura-rabbitmq
@@ -40,7 +46,7 @@ services:
     networks:
       - aura-network
 
-  # 2. IDENTITY SERVICE
+  # 3. IDENTITY SERVICE
   identity-service:
     container_name: identity-service
     build:
@@ -52,6 +58,7 @@ services:
       - RabbitMQ__Host=rabbitmq
       - RabbitMQ__Username=guest
       - RabbitMQ__Password=guest
+      - FIREBASE_AUTH_EMULATOR_HOST=aura-firebase:9099
     ports:
       - "5001:8080"
     depends_on:
@@ -62,7 +69,7 @@ services:
     networks:
       - aura-network
 
-  # 3. MEDICAL RECORD SERVICE
+  # 4. MEDICAL RECORD SERVICE
   medical-record-service:
     container_name: medical-record-service
     build:
@@ -72,8 +79,6 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_medical_db;Username=admin;Password=zxc123456
       - RabbitMQ__Host=rabbitmq
-      - RabbitMQ__Username=guest
-      - RabbitMQ__Password=guest
     ports:
       - "5002:8080"
     depends_on:
@@ -84,7 +89,7 @@ services:
     networks:
       - aura-network
 
-  # 4. IMAGING SERVICE
+  # 5. IMAGING SERVICE
   imaging-service:
     container_name: imaging-service
     restart: always
@@ -95,8 +100,6 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=aura.db;Port=5432;Database=aura_imaging_db;Username=admin;Password=zxc123456
       - RabbitMQ__Host=rabbitmq
-      - RabbitMQ__Username=guest
-      - RabbitMQ__Password=guest
     ports:
       - "5003:8080"
     volumes:
@@ -109,7 +112,7 @@ services:
     networks:
       - aura-network
 
-  # 5. BILLING SERVICE
+  # 6. BILLING SERVICE
   billing-service:
     container_name: billing-service
     build:
@@ -129,7 +132,7 @@ services:
     networks:
       - aura-network
 
-  # 6. NOTIFICATION SERVICE
+  # 7. NOTIFICATION SERVICE
   notification-service:
     container_name: notification-service
     build:
@@ -146,7 +149,7 @@ services:
     networks:
       - aura-network
 
-  # 7. AI CORE SERVICE
+  # 8. AI CORE SERVICE
   ai-core-service:
     container_name: ai-core-service
     restart: always
@@ -161,42 +164,86 @@ services:
     networks:
       - aura-network
 
-  # 8. API GATEWAY (NGINX)
-  gateway:
-    image: nginx:latest
-    container_name: aura-gateway
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    ports:
-      - "80:80"
-    depends_on:
-      - frontend
-      - identity-service
-      - medical-record-service
-      - imaging-service
-      - billing-service
-    networks:
-      - aura-network
-
-  # 10. FRONTEND (React)
+  # 9. FRONTEND (React)
   frontend:
     container_name: aura-frontend
     build:
       context: ../frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
-    volumes:
-      - ../frontend:/app
-      - /app/node_modules
-    environment:
-      - WATCHPACK_POLLING=true
-      - CHOKIDAR_USEPOLLING=true
-      - REACT_APP_API_URL=http://localhost/api
-      - WDS_SOCKET_PORT=0
-      - DANGEROUSLY_DISABLE_HOST_CHECK=true
-    command: npm start
+      - "3000:80"
     restart: always
+    networks:
+      - aura-network
+
+  # 10. API GATEWAY
+  gateway-service:
+    container_name: aura-gateway
+    build:
+      context: ../
+      dockerfile: backend/src/Gateways/AURA.GateWay/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "8000:8080"
+    # KHÔNG dùng volumes ocelot.json ở đây vì đã nhúng vào Dockerfile
+    depends_on:
+      - identity-service
+      - medical-record-service
+      - imaging-service
+      - billing-service
+      - notification-service
+    networks:
+      - aura-network
+
+  # 11. MONITORING - PROMETHEUS
+  prometheus:
+    image: prom/prometheus
+    container_name: aura-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - aura-network
+
+  # 12. MONITORING - GRAFANA
+  grafana:
+    image: grafana/grafana
+    container_name: aura-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - aura-network
+
+  # 13. APACHE NIFI
+  nifi:
+    image: apache/nifi:latest
+    container_name: aura-nifi
+    ports:
+      - "8443:8443"
+    environment:
+      - NIFI_WEB_HTTP_PORT=
+      - NIFI_WEB_HTTPS_PORT=8443
+      - SINGLE_USER_CREDENTIALS_USERNAME=admin
+      - SINGLE_USER_CREDENTIALS_PASSWORD=AuraSystem2026!
+    networks:
+      - aura-network
+
+  # 14. FIREBASE EMULATOR
+  firebase-emulator:
+    image: andreysenov/firebase-tools
+    container_name: aura-firebase
+    ports:
+      - "4000:4000"
+      - "9099:9099"
+    volumes:
+      - ../firebase:/home/node/app
+    working_dir: /home/node/app
+    command: firebase emulators:start --project demo-aura
     networks:
       - aura-network
 

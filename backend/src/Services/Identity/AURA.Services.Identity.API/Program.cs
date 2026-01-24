@@ -1,64 +1,67 @@
 using AURA.Services.Identity.Infrastructure;
 using AURA.Services.Identity.Application;
-using AURA.Services.Identity.Infrastructure.Data; // Cần dòng này để gọi DbContext
+using AURA.Services.Identity.Infrastructure.Data;
+using AURA.Services.Identity.API.Services; 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;              // Cần dòng này để gọi .Migrate()
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using MassTransit; // Bổ sung MassTransit
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ==================================================================
-// 1. ĐĂNG KÝ SERVICES (DEPENDENCY INJECTION)
-// ==================================================================
-
+// 1. ĐĂNG KÝ SERVICES
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// --- [FIX 1] CẤU HÌNH CORS (CHO PHÉP REACT GỌI API) ---
+// Đăng ký FirebaseAuthService
+builder.Services.AddScoped<FirebaseAuthService>();
+
+// [MỚI] CẤU HÌNH MASSTRANSIT (RABBITMQ)
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host(builder.Configuration["RabbitMq:Host"] ?? "rabbitmq", "/", h => {
+            h.Username("guest");
+            h.Password("guest");
+        });
+    });
+});
+
+// CẤU HÌNH CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
-        policy => policy.WithOrigins("http://localhost:3000") // Chỉ cho phép Frontend Port 3000
+        policy => policy.WithOrigins("http://localhost:3000")
                         .AllowAnyMethod()
                         .AllowAnyHeader());
 });
-// --------------------------------------------------------
 
-// --- CẤU HÌNH SWAGGER (CÓ NÚT AUTHORIZE) ---
+// CẤU HÌNH SWAGGER
 builder.Services.AddSwaggerGen(option =>
 {
     option.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA Identity API", Version = "v1" });
-    
-    // Cấu hình nút nhập Token (Bearer)
     option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
-        Description = "Nhập 'Bearer {token}' vào ô bên dưới",
+        Description = "Nhập 'Bearer {token}'",
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
         BearerFormat = "JWT",
         Scheme = "Bearer"
     });
-
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference { Type=ReferenceType.SecurityScheme, Id="Bearer" }
-            },
-            new string[]{}
-        }
+        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type=ReferenceType.SecurityScheme, Id="Bearer" } }, new string[]{} }
     });
 });
 
-// Load các lớp từ Application & Infrastructure Layer
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// --- CẤU HÌNH XÁC THỰC (JWT) ---
+// CẤU HÌNH JWT
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -85,30 +88,24 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// ==================================================================
-// 2. MIDDLEWARE (THỨ TỰ RẤT QUAN TRỌNG)
-// ==================================================================
-
-// --- [FIX 2] TỰ ĐỘNG CHẠY MIGRATION (TẠO DATABASE) ---
+// 2. MIDDLEWARE & MIGRATION & SEEDING
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppIdentityDbContext>();
-        // Lệnh này sẽ tự động tạo bảng nếu chưa có
-        if (context.Database.GetPendingMigrations().Any())
-        {
-            context.Database.Migrate();
-        }
-        Console.WriteLine("--> [Identity] Database Migration thành công!");
+        await context.Database.MigrateAsync();
+        await DbInitializer.SeedDataAsync(context); 
+        Console.WriteLine("--> [Identity] Database Inited & Seeded Successfully!");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"--> [Identity] Lỗi Migration: {ex.Message}");
+        Console.WriteLine($"--> [Identity] Lỗi khởi tạo DB: {ex.Message}");
     }
 }
-// -----------------------------------------------------
+
+
 
 if (app.Environment.IsDevelopment())
 {
@@ -116,16 +113,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// --- [FIX 3] TẮT HTTPS REDIRECTION TRONG DOCKER ---
-// app.UseHttpsRedirection(); // <--- Comment dòng này để tránh lỗi SSL
-// --------------------------------------------------
-
-// Kích hoạt CORS (Phải đặt trước Auth)
 app.UseCors("AllowReactApp");
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

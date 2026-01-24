@@ -1,0 +1,9 @@
+**/__pycache__/
+**/*.pyc
+venv/
+.env/
+**/datasets/
+**/static/results/
+**/*.weights
+**/*.h5
+**/*.pt
