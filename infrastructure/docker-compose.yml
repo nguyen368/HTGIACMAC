@@ -54,6 +54,7 @@ services:
       - RabbitMQ__Host=rabbitmq
       - RabbitMQ__Username=guest
       - RabbitMQ__Password=guest
+      - FIREBASE_AUTH_EMULATOR_HOST=aura-firebase:9099
     ports:
       - "5001:8080"
     depends_on:

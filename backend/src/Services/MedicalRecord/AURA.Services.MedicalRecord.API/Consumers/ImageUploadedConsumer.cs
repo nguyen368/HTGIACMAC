@@ -3,13 +3,11 @@ using AURA.Services.MedicalRecord.Domain.Entities;
 using AURA.Services.MedicalRecord.Infrastructure.Data;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
+using AURA.Shared.Messaging.Events;
 
 namespace AURA.Services.MedicalRecord.API.Consumers
 {
-    // [FIX] Cập nhật tên Event để khớp với Imaging Service
     public record ImageUploadedIntegrationEvent(Guid ImageId, string ImageUrl, Guid PatientId, Guid ClinicId, DateTime Timestamp);
-
     public record AnalysisCompletedEvent(Guid ExaminationId, Guid ClinicId, Guid PatientId, string RiskLevel, double RiskScore);
 
     public class AiResponse
@@ -21,7 +19,6 @@ namespace AURA.Services.MedicalRecord.API.Consumers
         [JsonPropertyName("heatmap_url")] public string HeatmapUrl { get; set; }
     }
 
-    // [FIX] Cập nhật interface IConsumer nhận đúng Event mới
     public class ImageUploadedConsumer : IConsumer<ImageUploadedIntegrationEvent>
     {
         private readonly MedicalDbContext _context;
@@ -40,13 +37,12 @@ namespace AURA.Services.MedicalRecord.API.Consumers
         public async Task Consume(ConsumeContext<ImageUploadedIntegrationEvent> context)
         {
             var msg = context.Message;
-            _logger.LogInformation($"[WORKFLOW START] Nhận ảnh {msg.ImageId}");
+            _logger.LogInformation($"[WORKFLOW] Bắt đầu xử lý ảnh {msg.ImageId} cho BN {msg.PatientId}");
 
             try
             {
                 var examination = new Examination(msg.PatientId, msg.ImageUrl);
                 examination.ImageId = msg.ImageId;
-                
                 _context.Examinations.Add(examination);
                 await _context.SaveChangesAsync();
 
@@ -63,13 +59,14 @@ namespace AURA.Services.MedicalRecord.API.Consumers
                         examination.UpdateAiResult(result.RiskLevel, result.Diagnosis, result.RiskScore, result.HeatmapUrl);
                         await _context.SaveChangesAsync();
 
-                        await _publishEndpoint.Publish(new AnalysisCompletedEvent(examination.Id, msg.ClinicId, msg.PatientId, result.RiskLevel, result.RiskScore));
+                        await _publishEndpoint.Publish(new AnalysisCompletedEvent(
+                            examination.Id, msg.ClinicId, msg.PatientId, result.RiskLevel, result.RiskScore));
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing");
+                _logger.LogError(ex, "Lỗi trong luồng ImageUploadedConsumer");
             }
         }
     }

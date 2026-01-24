@@ -11,16 +11,16 @@ using Microsoft.EntityFrameworkCore;
 using Google.Apis.Auth; 
 using AURA.Services.Identity.Application.Interfaces;
 using AURA.Services.Identity.API.Services;
+using MassTransit; 
+using AURA.Shared.Messaging.Events; 
 
 namespace AURA.Services.Identity.API.Controllers;
 
-// DTO cho Google Login
 public class GoogleLoginRequest
 {
     public string Token { get; set; } = string.Empty;
 }
 
-// DTO cho Firebase Login
 public class FirebaseLoginRequest
 {
     public string IdToken { get; set; } = string.Empty;
@@ -36,26 +36,36 @@ public class AuthController : ControllerBase
     private readonly AppIdentityDbContext _context;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly FirebaseAuthService _firebaseService; 
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public AuthController(
         ISender sender, 
         AppIdentityDbContext context,
         IJwtTokenService jwtTokenService,
-        FirebaseAuthService firebaseService)
+        FirebaseAuthService firebaseService,
+        IPublishEndpoint publishEndpoint)
     {
         _sender = sender;
         _context = context;
         _jwtTokenService = jwtTokenService;
         _firebaseService = firebaseService;
+        _publishEndpoint = publishEndpoint;
     }
 
-    // 1. ĐĂNG KÝ BỆNH NHÂN (Mặc định IsActive = true trong Entity)
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterUserCommand command)
     {
         var result = await _sender.Send(command);
         if (result.IsSuccess)
         {
+            await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
+                result.Value, 
+                command.Email, 
+                command.FullName, 
+                "Patient", 
+                null 
+            ));
+
             return Ok(new { 
                 isSuccess = true, 
                 message = "Đăng ký tài khoản bệnh nhân thành công!" 
@@ -64,11 +74,9 @@ public class AuthController : ControllerBase
         return BadRequest(new { isSuccess = false, message = result.Error });
     }
 
-    // 2. ĐĂNG NHẬP (Kiểm tra trạng thái phê duyệt)
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginQuery query)
     {
-        // Kiểm tra xem User có tồn tại và đã được kích hoạt chưa
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == query.Email || u.Username == query.Email);
         
         if (user != null && !user.IsActive)
@@ -83,30 +91,24 @@ public class AuthController : ControllerBase
         
         if (result.IsSuccess)
         {
-            // Trả về dữ liệu thành công kèm token
             return Ok(result.Value); 
         }
 
         return Unauthorized(new { isSuccess = false, message = "Tài khoản hoặc mật khẩu không chính xác." });
     }
 
-    // 3. ĐĂNG KÝ ĐỐI TÁC/QUẢN LÝ (Chờ Admin duyệt)
     [HttpPost("register-partner")]
     public async Task<IActionResult> RegisterPartner([FromBody] RegisterPartnerDto dto)
     {
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            // Tạo phòng khám trước
             var clinic = new Clinic(dto.ClinicName, dto.ClinicAddress, dto.LicenseUrl);
             _context.Clinics.Add(clinic);
             await _context.SaveChangesAsync();
 
-            // Băm mật khẩu
             var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
             
-            // Tạo User Quản lý (Role ClinicAdmin)
-            // Lưu ý: Constructor của User sẽ tự set IsActive = false nếu Role là ClinicAdmin
             var user = new User(
                 Guid.NewGuid(),
                 dto.Username,
@@ -121,6 +123,13 @@ public class AuthController : ControllerBase
             await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
+
+            await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
+                user.Id, 
+                user.Email, 
+                user.FullName, 
+                user.Role, 
+                user.ClinicId));
             
             return Ok(new { 
                 isSuccess = true, 
@@ -134,14 +143,15 @@ public class AuthController : ControllerBase
         }
     }
 
-    // 4. QUẢN LÝ TẠO TÀI KHOẢN BÁC SĨ (Admin của phòng khám mới có quyền)
     [Authorize(Roles = "ClinicAdmin")]
     [HttpPost("create-doctor")]
     public async Task<IActionResult> CreateDoctor([FromBody] CreateDoctorDto dto)
     {
-        var clinicIdClaim = User.FindFirst("ClinicId")?.Value;
+        // SỬA LỖI: Kiểm tra cả hai trường hợp clinicId (thường) và ClinicId (hoa)
+        var clinicIdClaim = User.FindFirst("clinicId")?.Value ?? User.FindFirst("ClinicId")?.Value;
+        
         if (string.IsNullOrEmpty(clinicIdClaim)) 
-            return Unauthorized(new { message = "Không tìm thấy thông tin phòng khám của bạn." });
+            return Unauthorized(new { message = "Không tìm thấy thông tin phòng khám của bạn trong Token." });
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
         
@@ -158,10 +168,16 @@ public class AuthController : ControllerBase
         _context.Users.Add(doctor);
         await _context.SaveChangesAsync();
 
+        await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
+            doctor.Id, 
+            doctor.Email, 
+            doctor.FullName, 
+            doctor.Role, 
+            doctor.ClinicId));
+
         return Ok(new { isSuccess = true, message = "Đã tạo tài khoản Bác sĩ thành công." });
     }
 
-    // 5. LẤY DANH SÁCH BỆNH NHÂN
     [HttpGet("patients")]
     public async Task<IActionResult> GetAllPatients()
     {
@@ -169,7 +185,28 @@ public class AuthController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
-    // 6. ĐĂNG NHẬP GOOGLE
+    [HttpGet("clinics")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetClinics()
+    {
+        try
+        {
+            var clinics = await _context.Clinics
+                .Select(c => new {
+                    id = c.Id,
+                    name = c.Name,
+                    address = c.Address
+                })
+                .ToListAsync();
+
+            return Ok(clinics);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = "Không thể tải danh sách phòng khám", error = ex.Message });
+        }
+    }
+
     [HttpPost("google-login")]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
@@ -189,6 +226,8 @@ public class AuthController : ControllerBase
                 user = new User(Guid.NewGuid(), payload.Email, "", payload.Email, payload.Name, "Patient", null);
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
+
+                await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(user.Id, user.Email, user.FullName, user.Role, null));
             }
 
             var token = _jwtTokenService.GenerateToken(user); 
@@ -208,7 +247,6 @@ public class AuthController : ControllerBase
         }
     }
 
-    // 7. ĐĂNG NHẬP FIREBASE
     [HttpPost("firebase-login")]
     public async Task<IActionResult> FirebaseLogin([FromBody] FirebaseLoginRequest request)
     {
@@ -232,6 +270,8 @@ public class AuthController : ControllerBase
                 );
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
+
+                await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(user.Id, user.Email, user.FullName, user.Role, null));
             }
 
             var token = _jwtTokenService.GenerateToken(user);

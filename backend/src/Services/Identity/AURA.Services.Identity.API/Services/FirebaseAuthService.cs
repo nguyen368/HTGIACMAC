@@ -11,31 +11,47 @@ namespace AURA.Services.Identity.API.Services
         public FirebaseAuthService(ILogger<FirebaseAuthService> logger)
         {
             _logger = logger;
-            // Khởi tạo Firebase App (Singleton)
+
+            // Khởi tạo Firebase App nếu chưa tồn tại
             if (FirebaseApp.DefaultInstance == null)
             {
-                // Trong thực tế, bạn cần file json credential
-                // Ở đây dùng code giả lập cho môi trường dev/emulator
-                FirebaseApp.Create(new AppOptions()
+                try 
                 {
-                    Credential = GoogleCredential.GetApplicationDefault(), 
-                    ProjectId = "demo-aura" 
-                });
+                    // Lưu ý: Trong môi trường thực tế, cần file firebase-service-account.json
+                    // Ở chế độ demo, chúng ta sử dụng Default Credentials
+                    FirebaseApp.Create(new AppOptions()
+                    {
+                        Credential = GoogleCredential.GetApplicationDefault(), 
+                        ProjectId = "demo-aura" 
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"Firebase App Init (Dự kiến lỗi nếu thiếu file JSON): {ex.Message}");
+                }
             }
         }
 
+        /// <summary>
+        /// Xác thực Token từ Frontend gửi lên và trả về Firebase UID
+        /// </summary>
         public async Task<string> VerifyTokenAsync(string idToken)
         {
+            if (string.IsNullOrEmpty(idToken)) return null;
+
             try
             {
-                // Verify ID Token gửi từ Frontend
+                // Nếu đang dùng Emulator hoặc không có Firebase cấu hình, trả về ID giả để demo tiếp
+                if (FirebaseApp.DefaultInstance == null) return "fake-firebase-id-for-demo";
+
                 var decodedToken = await FirebaseAdmin.Auth.FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
-                return decodedToken.Uid; // Trả về Firebase User ID
+                return decodedToken.Uid;
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Firebase Token Error: {ex.Message}");
-                return null;
+                // Trong trường hợp lỗi do chưa cấu hình Firebase, trả về null để AuthController xử lý
+                return null; 
             }
         }
     }

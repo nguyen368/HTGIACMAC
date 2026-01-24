@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.IO.Compression;
 using MassTransit;
+using AURA.Shared.Messaging.Events;
 
 namespace AURA.Services.Imaging.API.Controllers
 {

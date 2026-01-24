@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.AspNetCore.SignalR;
 using AURA.Services.Notification.API.Hubs;
+using AURA.Shared.Messaging.Events;
 
 namespace AURA.Services.Notification.API.Consumers
 {

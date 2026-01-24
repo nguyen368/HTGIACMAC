@@ -4,12 +4,11 @@ namespace AURA.Services.MedicalRecord.Domain.Entities;
 
 public class MedicalHistory : Entity
 {
-    public Guid PatientId { get; private set; } // Foreign Key
-    public string Condition { get; private set; } // Tên bệnh (VD: Tiểu đường)
-    public string Description { get; private set; } // Mô tả chi tiết/Thuốc đang dùng
-    public DateTime DiagnosedDate { get; private set; } // Ngày phát hiện
+    public Guid PatientId { get; private set; } 
+    public string Condition { get; private set; } = string.Empty; // [FIX WARNING]
+    public string Description { get; private set; } = string.Empty; // [FIX WARNING]
+    public DateTime DiagnosedDate { get; private set; } 
 
-    // Constructor dùng cho EF Core
     private MedicalHistory() { }
 
     public MedicalHistory(Guid patientId, string condition, string description, DateTime diagnosedDate)

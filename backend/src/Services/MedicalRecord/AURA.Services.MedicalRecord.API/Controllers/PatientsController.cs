@@ -43,7 +43,9 @@ public class PatientsController : ControllerBase
         if (existingPatient != null) return BadRequest("Hồ sơ bệnh nhân đã tồn tại.");
 
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
-        var patient = new Patient(userId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+        
+        // [FIX LỖI BUILD CS7036]: Đã thêm request.ClinicId vào tham số thứ 2
+        var patient = new Patient(userId, request.ClinicId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
         
         _context.Patients.Add(patient);
         await _context.SaveChangesAsync();
@@ -84,7 +86,8 @@ public class PatientsController : ControllerBase
 
         if (patient == null) 
         {
-            patient = new Patient(userId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+            // [FIX LỖI BUILD CS7036]: Đã thêm request.ClinicId vào tham số thứ 2
+            patient = new Patient(userId, request.ClinicId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
             _context.Patients.Add(patient);
         }
         else 
@@ -118,7 +121,6 @@ public class PatientsController : ControllerBase
                                       e.ExamDate,
                                       e.ImageUrl,
                                       e.Status,
-                                      // Hiển thị kết quả sơ bộ
                                       Result = e.Status == "Verified" ? e.Diagnosis : (e.Status == "Analyzed" ? e.AiDiagnosis : "Đang xử lý"),
                                       e.AiRiskLevel
                                   })
@@ -127,7 +129,6 @@ public class PatientsController : ControllerBase
         return Ok(exams);
     }
 
-    // [MỚI] Xem chi tiết 1 ca khám (Bao gồm Heatmap AI)
     [HttpGet("examinations/{examId}")]
     public async Task<IActionResult> GetExamDetail(Guid examId)
     {
@@ -146,12 +147,10 @@ public class PatientsController : ControllerBase
             exam.ExamDate,
             exam.ImageUrl,
             exam.Status,
-            // Các trường AI
             exam.HeatmapUrl,
             exam.AiRiskScore,
             exam.AiRiskLevel,
             exam.AiDiagnosis,
-            // Kết quả cuối cùng
             exam.Diagnosis,
             exam.DoctorNotes
         });

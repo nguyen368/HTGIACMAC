@@ -30,7 +30,7 @@ namespace AURA.Services.Identity.Application.Users.Commands.RegisterUser
                 return Result<Guid>.Failure("Tên đăng nhập này đã được sử dụng.");
             }
 
-            // 2. Kiểm tra Email (Đã sửa lỗi CS1501: Xóa cancellationToken ở đây)
+            // 2. Kiểm tra Email
             var existingUserByEmail = await _userRepository.GetByEmailAsync(request.Email);
             if (existingUserByEmail != null)
             {

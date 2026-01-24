@@ -1,18 +1,36 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import jwtDecode from 'jwt-decode';
 import authApi from '../api/authApi'; 
-import axiosClient from '../api/axiosClient'; // Import thêm axiosClient
+import axiosClient from '../api/axiosClient';
 
-const AuthContext = createContext(null);
+// 1. Định nghĩa Interface cho User
+export interface User {
+    id: string;
+    role: string;
+    token: string;
+    fullName: string;
+    email?: string;
+    phoneNumber?: string;
+    picture?: string;
+    clinicId?: string;
+}
 
-const parseJwt = (token) => {
+interface AuthContextType {
+    user: User | null;
+    login: (input1: string | object, input2?: string) => Promise<{ success: boolean; role?: string; message?: string }>;
+    logout: () => void;
+    loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const parseJwt = (token: string): any => {
     try {
         return jwtDecode(token);
     } catch (e) { return null; }
 };
 
-const cleanPhoneNumber = (raw) => {
+const cleanPhoneNumber = (raw: any): string => {
     if (!raw || typeof raw !== 'string') return ''; 
     let str = String(raw).trim();
     if (str.startsWith('+840')) return '0' + str.slice(4); 
@@ -21,11 +39,11 @@ const cleanPhoneNumber = (raw) => {
     return str;
 };
 
-export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [user, setUser] = useState<User | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
 
-    const mergeUserData = (baseUser, dbProfile) => {
+    const mergeUserData = (baseUser: any, dbProfile: any): User => {
         if (!dbProfile) return baseUser;
         return {
             ...baseUser,
@@ -35,17 +53,14 @@ export const AuthProvider = ({ children }) => {
         };
     };
 
-    // --- FETCH PROFILE (ĐÃ SỬA: TRUYỀN TOKEN TRỰC TIẾP) ---
-    const fetchUserProfile = async (token) => {
+    const fetchUserProfile = async (token: string) => {
         try {
-            // Quan trọng: Truyền header Authorization trực tiếp tại đây
-            // để đảm bảo backend nhận được token ngay lập tức sau khi login
             const response = await axiosClient.get('/patients/me', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            return response; 
+            return response.data?.value || response.data || response; 
         } catch (error) { 
-            console.warn("Lỗi lấy thông tin user (có thể do user mới chưa có profile):", error);
+            console.warn("Lỗi lấy thông tin user:", error);
             return null; 
         }
     };
@@ -63,7 +78,6 @@ export const AuthProvider = ({ children }) => {
                     let currentUser = savedUser ? JSON.parse(savedUser) : {};
                     setUser(currentUser);
                     
-                    // Gọi hàm với token
                     const dbProfile = await fetchUserProfile(token);
                     if (dbProfile) {
                         const updated = mergeUserData(currentUser, dbProfile);
@@ -77,19 +91,18 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, []);
 
-    const login = async (input1, input2) => {
+    const login = async (input1: any, input2?: string) => {
         try {
-            let token = null;
-            let userData = {};
+            let token: string | null = null;
+            let userData: any = {};
 
             if (typeof input1 === 'object' && input1.token) {
-                console.log("👉 Phát hiện đăng nhập Google/Token trực tiếp");
                 token = input1.token;
                 userData = input1; 
             } 
             else if (typeof input1 === 'string') {
                 const cleanPhone = cleanPhoneNumber(input1);
-                const response = await authApi.login({ 
+                const response: any = await authApi.login({ 
                     phoneNumber: cleanPhone,
                     email: input1,
                     password: input2 
@@ -97,14 +110,12 @@ export const AuthProvider = ({ children }) => {
                 
                 const data = response.data?.value || response.data || response;
                 token = data.token;
-                
                 if (!token) throw new Error("Không tìm thấy token trong phản hồi");
             }
 
             if (!token) return { success: false, message: "Đăng nhập thất bại" };
 
             localStorage.setItem('aura_token', token);
-            
             const decoded = parseJwt(token);
             const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
             
@@ -117,7 +128,6 @@ export const AuthProvider = ({ children }) => {
                 picture: userData.picture
             };
 
-            // Truyền token vào đây để đảm bảo request có quyền
             const dbProfile = await fetchUserProfile(token);
             const finalUser = mergeUserData(baseUser, dbProfile);
 
@@ -126,7 +136,7 @@ export const AuthProvider = ({ children }) => {
 
             return { success: true, role: finalUser.role };
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Login Error:", error);
             return { success: false, message: error.message };
         }
@@ -146,5 +156,8 @@ export const AuthProvider = ({ children }) => {
     );
 };
 
-export const useAuth = () => useContext(AuthContext);
-export default AuthContext;
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) throw new Error("useAuth must be used within AuthProvider");
+    return context;
+};
