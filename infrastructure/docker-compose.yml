@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-init/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck: # THÊM HEALTHCHECK CHO DB
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d aura_identity_db"]
       interval: 10s
       timeout: 5s
@@ -21,7 +21,7 @@ services:
     networks:
       - aura-network
 
-  # 9. RabbitMQ (ĐƯA LÊN TRƯỚC ĐỂ SERVICE GỌI)
+  # 9. RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management
     container_name: aura-rabbitmq
@@ -32,7 +32,7 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
-    healthcheck: # THÊM HEALTHCHECK CHO RABBITMQ
+    healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
@@ -56,9 +56,9 @@ services:
       - "5001:8080"
     depends_on:
       aura.db:
-        condition: service_healthy # Đợi DB khỏe mới chạy
+        condition: service_healthy
       rabbitmq:
-        condition: service_healthy # Đợi RabbitMQ khỏe mới chạy
+        condition: service_healthy
     networks:
       - aura-network
 
