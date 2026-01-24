@@ -1,12 +1,17 @@
 import React from 'react';
 
-const ImageOverlay = ({ bbox }) => {
+// Định nghĩa kiểu cho props
+interface ImageOverlayProps {
+  bbox?: number[] | null; // Mảng 4 phần tử [x, y, w, h] hoặc null
+}
+
+const ImageOverlay: React.FC<ImageOverlayProps> = ({ bbox }) => {
   // Nếu không có tọa độ hoặc mảng rỗng thì không vẽ gì cả
   if (!bbox || !Array.isArray(bbox) || bbox.length < 4) return null;
 
   const [x, y, w, h] = bbox;
 
-  const style = {
+  const style: React.CSSProperties = {
     position: 'absolute',
     left: `${x}px`,
     top: `${y}px`,

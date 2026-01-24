@@ -1,24 +1,52 @@
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import imagingApi from '../../../../api/imagingApi'; // Import API để lấy kết quả mới nhất
 
-const PatientHome = ({ user, setTab }) => {
+// --- Định nghĩa Interface ---
+
+interface User {
+    id?: string;
+    userId?: string;
+    fullName?: string;
+    [key: string]: any;
+}
+
+interface AiDiagnosis {
+    diagnosis?: string;
+    result?: string;
+    [key: string]: any;
+}
+
+interface ExamResult {
+    id: string;
+    uploadedAt: string;
+    aiDiagnosis?: AiDiagnosis;
+    [key: string]: any;
+}
+
+interface PatientHomeProps {
+    user: User | null;
+    setTab?: (tab: string) => void;
+}
+
+const PatientHome: React.FC<PatientHomeProps> = ({ user, setTab }) => {
     // --- [CODE MỚI] Logic lấy kết quả khám gần nhất ---
-    const [lastExam, setLastExam] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [lastExam, setLastExam] = useState<ExamResult | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
 
     useEffect(() => {
         if (user) {
             const patientId = user.id || user.userId;
             imagingApi.getImagesByPatient(patientId)
-                .then(data => {
+                .then((data: any) => {
                     const list = Array.isArray(data) ? data : (data.data || []);
                     if (list.length > 0) {
                         // Sắp xếp giảm dần để lấy cái mới nhất
-                        const sorted = list.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+                        const sorted = list.sort((a: ExamResult, b: ExamResult) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
                         setLastExam(sorted[0]);
                     }
                 })
-                .catch(err => console.error(err))
+                .catch((err: any) => console.error(err))
                 .finally(() => setLoading(false));
         }
     }, [user]);

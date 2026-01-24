@@ -1,11 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+// @ts-ignore
 import { GoogleLogin } from '@react-oauth/google';
+// @ts-ignore
 import authApi from '../../../../api/authApi';
 import './AuthPage.css';
+// @ts-ignore
 import { useAuth } from '../../../../context/AuthContext';
 
-const parseJwt = (token) => {
+// --- Định nghĩa các Interface ---
+
+interface LoginData {
+    email: string;
+    password: string;
+    remember: boolean;
+}
+
+interface RegisterData {
+    fullName: string;
+    email: string;
+    phone: string;
+    password: string;
+    confirmPassword: string;
+    terms: boolean;
+    accountType: string;
+    [key: string]: string | boolean; // Index signature để hỗ trợ truy cập động
+}
+
+interface PasswordCriteria {
+    length: boolean;
+    special: boolean;
+}
+
+interface AuthResponse {
+    isSuccess?: boolean;
+    message?: string;
+    token?: string;
+    [key: string]: any;
+}
+
+const parseJwt = (token: string): any => {
     try {
         const base64Url = token.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -14,32 +48,34 @@ const parseJwt = (token) => {
     } catch (e) { return null; }
 };
 
-const AuthPage = () => {
+const AuthPage: React.FC = () => {
     const navigate = useNavigate();
     const { login } = useAuth();
-    const [activeTab, setActiveTab] = useState('login'); 
-    const [isLoading, setIsLoading] = useState(false);
-    const [showForgotPassword, setShowForgotPassword] = useState(false);
-    const [showLoginPassword, setShowLoginPassword] = useState(false);
-    const [showRegPassword, setShowRegPassword] = useState(false);
+    const [activeTab, setActiveTab] = useState<'login' | 'register'>('login'); 
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [showForgotPassword, setShowForgotPassword] = useState<boolean>(false);
+    const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
+    const [showRegPassword, setShowRegPassword] = useState<boolean>(false);
 
-    const [loginData, setLoginData] = useState({ email: '', password: '', remember: false });
-    const [regData, setRegData] = useState({
+    const [loginData, setLoginData] = useState<LoginData>({ email: '', password: '', remember: false });
+    const [regData, setRegData] = useState<RegisterData>({
         fullName: '', email: '', phone: '+84', password: '', confirmPassword: '',
         terms: false, accountType: 'Patient' 
     });
 
-    const [passwordCriteria, setPasswordCriteria] = useState({ length: false, special: false });
+    const [passwordCriteria, setPasswordCriteria] = useState<PasswordCriteria>({ length: false, special: false });
 
-    const handleLoginChange = (e) => {
+    const handleLoginChange = (e: ChangeEvent<HTMLInputElement>) => {
         const { id, value, checked, type } = e.target;
         setLoginData(prev => ({ ...prev, [id]: type === 'checkbox' ? checked : value }));
     };
 
-    const handleRegChange = (e) => {
+    const handleRegChange = (e: ChangeEvent<HTMLInputElement>) => {
         const { name, value, checked, type } = e.target;
         const fieldName = (name === 'account-type') ? 'accountType' : (name || e.target.id);
+        
         setRegData(prev => ({ ...prev, [fieldName]: type === 'checkbox' ? checked : value }));
+        
         if (fieldName === 'password') {
             setPasswordCriteria({
                 length: value.length >= 8,
@@ -48,11 +84,11 @@ const AuthPage = () => {
         }
     };
 
-    const handleLoginSubmit = async (e) => {
+    const handleLoginSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            const res = await authApi.login({ email: loginData.email, password: loginData.password });
+            const res: AuthResponse = await authApi.login({ email: loginData.email, password: loginData.password });
             
             // KIỂM TRA CHỜ DUYỆT (Nếu Backend trả về isSuccess: false)
             if (res.isSuccess === false) {
@@ -80,19 +116,19 @@ const AuthPage = () => {
                     navigate('/patient/dashboard');
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
             alert('Lỗi: ' + (error.response?.data?.message || "Sai thông tin đăng nhập hoặc tài khoản chưa được duyệt"));
         } finally { setIsLoading(false); }
     };
 
-    const handleRegisterSubmit = async (e) => {
+    const handleRegisterSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (regData.password !== regData.confirmPassword) { alert('Mật khẩu không khớp!'); return; }
         if (!regData.terms) { alert('Vui lòng đồng ý điều khoản!'); return; }
         
         setIsLoading(true);
         try {
-            let res;
+            let res: AuthResponse;
             if (regData.accountType === 'ClinicAdmin') {
                 res = await authApi.registerPartner({
                     username: regData.email, email: regData.email,
@@ -109,7 +145,7 @@ const AuthPage = () => {
             }
             alert(res.message || 'Đăng ký thành công!');
             if (res.isSuccess !== false) setActiveTab('login');
-        } catch (error) { 
+        } catch (error: any) { 
             alert('Đăng ký thất bại: ' + (error.response?.data?.message || "")); 
         } finally { setIsLoading(false); }
     };

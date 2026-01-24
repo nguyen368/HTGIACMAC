@@ -35,6 +35,18 @@ const imagingApi = {
     formData.append("ClinicId", clinicId);
     formData.append("PatientId", patientId); 
     return imagingClient.post("/imaging/upload", formData);
+  },
+  getStats: (clinicId) => {
+    return imagingClient.get(`/imaging/stats/${clinicId}`);
+  },
+
+  // Upload nhiều ảnh (Batch)
+  batchUpload: (file, clinicId, patientId) => {
+    const formData = new FormData();
+    formData.append("File", file);
+    formData.append("ClinicId", clinicId);
+    formData.append("PatientId", patientId);
+    return imagingClient.post("/imaging/upload/batch", formData);
   }
 };
 

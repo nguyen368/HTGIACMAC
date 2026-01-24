@@ -41,7 +41,17 @@ const medicalApi = {
     hardwareCapture: (formData: FormData): Promise<{ imageId: string }> => 
         medicalClient.post("/imaging/hardware/capture", formData, {
             headers: { "Content-Type": "multipart/form-data" }
-        }).then(res => res.data)
+        }).then(res => res.data),
+        getExaminationById: (id: string): Promise<Examination> =>
+        medicalClient.get(`/medical-records/examinations/${id}`).then(res => res.data),
+
+    // Dùng cho ClinicExamDetail (Alias cho getExaminationById hoặc endpoint riêng nếu có)
+    getExaminationDetail: (id: string): Promise<any> =>
+        medicalClient.get(`/medical-records/examinations/${id}`).then(res => res.data),
+
+    // Dùng cho việc bác sĩ cập nhật chẩn đoán sơ bộ
+    updateDiagnosis: (id: string, data: { diagnosisResult: string; doctorNotes: string }): Promise<any> =>
+        medicalClient.put(`/medical-records/examinations/${id}/diagnosis`, data)
 };
 
 export default medicalApi;
