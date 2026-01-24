@@ -5,6 +5,7 @@
   "dependencies": {
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
+    "@microsoft/signalr": "^8.0.0",
     "@mui/icons-material": "^5.14.3",
     "@mui/material": "^5.14.3",
     "@mui/x-data-grid": "^6.19.6",
@@ -21,7 +22,8 @@
     "react-confetti": "^6.4.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.12.0",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "react-toastify": "^10.0.5"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -47,5 +49,12 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:80"
+  "proxy": "http://localhost:80",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.0.10",
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^4.9.5"
+  }
 }

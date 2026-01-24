@@ -16,14 +16,17 @@
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
 
-    <PackageReference Include="MassTransit" Version="8.1.3" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.1.3" />
+    <PackageReference Include="MassTransit" Version="8.2.5" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.2.5" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AURA.Services.MedicalRecord.Infrastructure\AURA.Services.MedicalRecord.Infrastructure.csproj" />
     <ProjectReference Include="..\AURA.Services.MedicalRecord.Application\AURA.Services.MedicalRecord.Application.csproj" />
+    <ProjectReference Include="..\AURA.Services.MedicalRecord.Domain\AURA.Services.MedicalRecord.Domain.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\AURA.Shared.Kernel\AURA.Shared.Kernel.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AURA.Shared.Messaging\AURA.Shared.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

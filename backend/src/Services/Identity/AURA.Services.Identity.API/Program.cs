@@ -1,11 +1,13 @@
 using AURA.Services.Identity.Infrastructure;
 using AURA.Services.Identity.Application;
 using AURA.Services.Identity.Infrastructure.Data;
+using AURA.Services.Identity.API.Services; 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using MassTransit; // Bổ sung MassTransit
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +15,22 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// CẤU HÌNH CORS (CHO PHÉP FRONTEND GỌI API)
+// Đăng ký FirebaseAuthService
+builder.Services.AddScoped<FirebaseAuthService>();
+
+// [MỚI] CẤU HÌNH MASSTRANSIT (RABBITMQ)
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host(builder.Configuration["RabbitMq:Host"] ?? "rabbitmq", "/", h => {
+            h.Username("guest");
+            h.Password("guest");
+        });
+    });
+});
+
+// CẤU HÌNH CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
@@ -71,18 +88,15 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// 2. MIDDLEWARE & MIGRATION & SEEDING (QUAN TRỌNG)
+// 2. MIDDLEWARE & MIGRATION & SEEDING
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppIdentityDbContext>();
-        
-        // Gọi hàm Seed Data từ file DbInitializer
-        // Hàm này sẽ tự động Migrate DB và thêm Admin/Bác sĩ mẫu
+        await context.Database.MigrateAsync();
         await DbInitializer.SeedDataAsync(context); 
-        
         Console.WriteLine("--> [Identity] Database Inited & Seeded Successfully!");
     }
     catch (Exception ex)
@@ -91,13 +105,14 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Bật CORS TRƯỚC Authentication
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();

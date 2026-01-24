@@ -17,11 +17,14 @@
     </PackageReference>
     <PackageReference Include="prometheus-net.AspNetCore" Version="8.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AURA.Services.Imaging.Application\AURA.Services.Imaging.Application.csproj" />
+    <ProjectReference Include="..\AURA.Services.Imaging.Domain\AURA.Services.Imaging.Domain.csproj" />
     <ProjectReference Include="..\AURA.Services.Imaging.Infrastructure\AURA.Services.Imaging.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\AURA.Shared.Messaging\AURA.Shared.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

@@ -69,12 +69,19 @@ const AuthPage = () => {
                 const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
                 const userRole = (decoded?.[roleKey] || decoded?.role || 'patient').toLowerCase();
 
-                if (userRole.includes('admin')) navigate('/admin/dashboard');
-                else if (userRole === 'doctor') navigate('/doctor'); 
-                else navigate('/patient/dashboard');
+                // --- LOGIC ĐIỀU HƯỚNG CẬP NHẬT ---
+                if (userRole.includes('admin') && !userRole.includes('clinic')) {
+                    navigate('/admin/dashboard');
+                } else if (userRole === 'clinicadmin') {
+                    navigate('/clinic/dashboard'); // Chuyển đến trang quản lý phòng khám
+                } else if (userRole === 'doctor') {
+                    navigate('/doctor'); 
+                } else {
+                    navigate('/patient/dashboard');
+                }
             }
         } catch (error) {
-            alert('Lỗi: ' + (error.response?.data?.message || "Sai thông tin đăng nhập"));
+            alert('Lỗi: ' + (error.response?.data?.message || "Sai thông tin đăng nhập hoặc tài khoản chưa được duyệt"));
         } finally { setIsLoading(false); }
     };
 
@@ -87,15 +94,13 @@ const AuthPage = () => {
         try {
             let res;
             if (regData.accountType === 'ClinicAdmin') {
-                // GỌI API CHO QUẢN LÝ
                 res = await authApi.registerPartner({
                     username: regData.email, email: regData.email,
                     password: regData.password, fullName: regData.fullName,
-                    clinicName: "Phòng khám mới", // Tạm thời để mặc định nếu UI chưa có input này
+                    clinicName: "Phòng khám mới", 
                     clinicAddress: "Chưa cập nhật"
                 });
             } else {
-                // GỌI API CHO BỆNH NHÂN
                 res = await authApi.register({
                     username: regData.email, email: regData.email,
                     password: regData.password, fullName: regData.fullName,
