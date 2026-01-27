@@ -1,91 +1,88 @@
 import React, { useState, ChangeEvent } from 'react';
+// @ts-ignore
 import imagingApi from '../../../../api/imagingApi';
+// @ts-ignore
 import { useAuth } from '../../../../context/AuthContext';
+import '../Dashboard/PatientHome.css';
 
-interface PatientUploadProps {
-    onUploadSuccess?: () => void;
-}
-
-const PatientUpload: React.FC<PatientUploadProps> = ({ onUploadSuccess }) => {
+const PatientUpload: React.FC<{ onUploadSuccess?: () => void }> = ({ onUploadSuccess }) => {
     const { user } = useAuth();
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
-    const [loading, setLoading] = useState<boolean>(false);
+    const [loading, setLoading] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const [result, setResult] = useState<any>(null);
 
-    const clinicId = "d2b51336-6c1c-426d-881e-45051666617a"; 
-
-    const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-        const selected = e.target.files?.[0];
-        if (selected) {
-            setFile(selected);
-            setPreview(URL.createObjectURL(selected));
-            setResult(null); 
+    // Xử lý kéo thả
+    const onDrop = (e: React.DragEvent) => {
+        e.preventDefault(); setIsDragging(false);
+        const f = e.dataTransfer.files[0];
+        if (f && f.type.startsWith('image/')) {
+            setFile(f); setPreview(URL.createObjectURL(f));
         }
     };
 
     const handleUpload = async () => {
         if (!file || !user) return;
-        const patientId = user.id;
+        const pId = (user as any).id || (user as any).userId || (user as any).sub || "";
         setLoading(true);
         try {
-            // Lưu ý: data trả về từ Axios nằm trong .data
-            const response = await imagingApi.uploadSingle(file, clinicId, patientId);
-            const data = response.data || response;
-            const details = data.details || data.Details || [];
-            if (details.length > 0) {
-                setResult(details[0]);
-            }
-        } catch (error: any) {
-            alert(`❌ Lỗi: ${error.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const renderResult = () => {
-        if (!result) return null;
-        const ai = result.aiDiagnosis || result.AiDiagnosis || {};
-        const meta = ai.metadata || {};
-        const isRejected = result.status === 'Rejected' || ai.status === 'Rejected' || ai.risk_level === 'Invalid';
-
-        return (
-            <div style={{ marginTop: '30px', width: '100%' }}>
-                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                    <div style={{ background: isRejected ? '#fff1f2' : '#f0f9ff', padding: '15px 20px', display: 'flex', justifyContent: 'space-between' }}>
-                        <h3>{isRejected ? 'Hệ thống từ chối ảnh' : 'Kết quả Phân tích AI'}</h3>
-                    </div>
-                    <div style={{ padding: '24px' }}>
-                        <img src={result.Url || result.url} style={{ width: '100%', maxHeight: '350px', objectFit: 'contain' }} alt="Gốc" />
-                        {!isRejected && <img src={ai.heatmap_url} style={{ width: '100%', marginTop: '20px' }} alt="Heatmap" />}
-                        <div style={{ marginTop: '20px', padding: '15px', background: '#f8fafc' }}>
-                             <p><b>Chẩn đoán:</b> {ai.diagnosis || ai.result}</p>
-                             <p><b>Rủi ro:</b> {ai.risk_level} ({Math.round(ai.risk_score || 0)}%)</p>
-                        </div>
-                    </div>
-                </div>
-                <div style={{ textAlign: 'center', marginTop: '20px' }}>
-                    <button className="btn btn-secondary" onClick={() => { setFile(null); setPreview(null); setResult(null); }}>Chụp ảnh khác</button>
-                    <button className="btn btn-dark" style={{marginLeft: '10px'}} onClick={() => onUploadSuccess?.()}>Lịch sử</button>
-                </div>
-            </div>
-        );
+            const res: any = await imagingApi.uploadSingle(file, "d2b51336-6c1c-426d-881e-45051666617a", pId);
+            const data = res.data || res;
+            const details = data.details || data.Details || (data.imageUrl ? [data] : []);
+            if (details.length > 0) setResult(details[0]);
+            else { alert("Thành công! AI đang xử lý."); onUploadSuccess?.(); }
+        } catch (error: any) { alert("Lỗi: " + error.message); } 
+        finally { setLoading(false); }
     };
 
     return (
-        <div className="pro-card p-4">
-            <h3>Hệ thống Sàng lọc AI</h3>
-            <div className="text-center">
+        <div className="dashboard-home animate-fade-in">
+            <div className="welcome-banner">
+                <div className="welcome-content">
+                    <h2>Sàng lọc AI Cao cấp ✨</h2>
+                    <p>Ứng dụng Deep Learning để chẩn đoán tổn thương võng mạc chính xác.</p>
+                </div>
+            </div>
+
+            <div className="pro-card p-5 mt-4">
                 {!result ? (
-                    <div className="upload-box" onClick={() => document.getElementById('file-input')?.click()} style={{ cursor: 'pointer', border: '2px dashed #ccc', padding: '40px' }}>
-                        {preview ? <img src={preview} style={{ maxHeight: '300px' }} /> : <p>Nhấn để chọn ảnh</p>}
-                        <input type="file" id="file-input" hidden onChange={handleFileChange} accept="image/*" />
+                    <div className="upload-container text-center">
+                        <div 
+                            className={`upload-wrapper ${isDragging ? 'dragging' : ''}`}
+                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                            onDragLeave={() => setIsDragging(false)}
+                            onDrop={onDrop}
+                            onClick={() => document.getElementById('file-up-id')?.click()}
+                            style={{ border: isDragging ? '3px solid #0ea5e9' : '3px dashed #cbd5e0', padding: '60px', borderRadius: '24px', cursor: 'pointer', background: isDragging ? '#f0f9ff' : '#f8fafc', transition: '0.3s' }}
+                        >
+                            {preview ? <img src={preview} style={{maxHeight:'350px', borderRadius:'12px'}} /> : 
+                            <><i className="fas fa-cloud-upload-alt" style={{fontSize:'80px', color:'#0ea5e9', marginBottom:'20px'}}></i><h3>Kéo thả hoặc nhấn chọn ảnh</h3></>}
+                            <input type="file" id="file-up-id" hidden accept="image/*" onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if(f) { setFile(f); setPreview(URL.createObjectURL(f)); }
+                            }} />
+                        </div>
+                        {file && <button className="btn-save w-100 mt-4" style={{height:'60px'}} onClick={handleUpload} disabled={loading}>
+                            {loading ? "ĐANG PHÂN TÍCH AI..." : "BẮT ĐẦU CHẨN ĐOÁN"}
+                        </button>}
                     </div>
-                ) : renderResult()}
-                {file && !result && <button className="btn btn-primary mt-4 w-100" onClick={handleUpload} disabled={loading}>{loading ? 'Đang phân tích...' : 'Gửi đi phân tích AI'}</button>}
+                ) : (
+                    /* UI HIỂN THỊ HEATMAP CỦA BẠN */
+                    <div className="ai-result-panel animate-fade-in">
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px'}}>
+                            <div className="pro-card p-3 text-center"><p className="small">Ảnh gốc</p><img src={result.url || result.Url} style={{width:'100%', borderRadius:'8px'}} /></div>
+                            <div className="pro-card p-3 text-center"><p className="small">Vùng tổn thương</p><img src={result.aiDiagnosis?.heatmap_url} style={{width:'100%', borderRadius:'8px'}} /></div>
+                        </div>
+                        <div className="pro-card mt-4 p-4 text-left" style={{background: '#f0fdf4', border:'none'}}>
+                            <h4>Chẩn đoán: {result.aiDiagnosis?.diagnosis}</h4>
+                            <p>Độ rủi ro: <b>{result.aiDiagnosis?.risk_level} ({result.aiDiagnosis?.risk_score}%)</b></p>
+                            <button className="btn-save mt-3" onClick={() => onUploadSuccess?.()}>Về Lịch Sử</button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
-
 export default PatientUpload;

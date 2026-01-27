@@ -1,45 +1,42 @@
 using MassTransit;
-using AURA.Services.MedicalRecord.Domain.Entities;
 using AURA.Services.MedicalRecord.Infrastructure.Data;
-using AURA.Shared.Messaging.Events;
-using Microsoft.EntityFrameworkCore;
+using AURA.Services.MedicalRecord.Domain.Entities;
+using AURA.Shared.Messaging.Events; 
 
 namespace AURA.Services.MedicalRecord.API.Consumers
 {
+    // [FIX] Đổi UserRegisteredEvent thành UserRegisteredIntegrationEvent
     public class UserRegisteredConsumer : IConsumer<UserRegisteredIntegrationEvent>
     {
         private readonly MedicalDbContext _context;
-        private readonly ILogger<UserRegisteredConsumer> _logger;
 
-        public UserRegisteredConsumer(MedicalDbContext context, ILogger<UserRegisteredConsumer> logger)
+        public UserRegisteredConsumer(MedicalDbContext context)
         {
             _context = context;
-            _logger = logger;
         }
 
+        // [FIX] Đổi UserRegisteredEvent thành UserRegisteredIntegrationEvent
         public async Task Consume(ConsumeContext<UserRegisteredIntegrationEvent> context)
         {
-            var msg = context.Message;
-            _logger.LogInformation($"[SYNC] Nhận thông tin người dùng mới: {msg.FullName} ({msg.Role})");
+            var message = context.Message;
+            
+            var newPatient = new Patient(
+                message.UserId,
+                message.ClinicId ?? Guid.Empty, // Xử lý nullable nếu cần
+                message.FullName,
+                DateTime.UtcNow, 
+                "Unknown",       
+                message.PhoneNumber ?? "N/A", // Xử lý null nếu cần
+                "N/A"            
+            );
 
-            if (msg.Role == "Patient")
+            // Kiểm tra trùng
+            var exists = _context.Patients.Any(p => p.UserId == message.UserId);
+            if (!exists)
             {
-                var existing = await _context.Patients.AnyAsync(p => p.UserId == msg.UserId);
-                if (!existing)
-                {
-                    // Tạo hồ sơ bệnh nhân mặc định để không bị lỗi 404 khi vào trang Profile
-                    var patient = new Patient(
-                        msg.UserId, 
-                        msg.ClinicId ?? Guid.Empty, 
-                        msg.FullName, 
-                        DateTime.SpecifyKind(new DateTime(2000, 1, 1), DateTimeKind.Utc), 
-                        "Other", 
-                        "", 
-                        "Chưa cập nhật");
-                        
-                    _context.Patients.Add(patient);
-                    await _context.SaveChangesAsync();
-                }
+                _context.Patients.Add(newPatient);
+                await _context.SaveChangesAsync();
+                Console.WriteLine($"--> [Medical] Synced patient: {message.Email}");
             }
         }
     }

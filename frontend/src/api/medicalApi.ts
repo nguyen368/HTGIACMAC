@@ -1,57 +1,63 @@
-import axios from "axios";
 import { PatientProfile, Clinic, Examination, ClinicStats } from "../types/medical";
-
-const medicalClient = axios.create({
-    baseURL: "http://localhost:80/api",
-    headers: { "Content-Type": "application/json" },
-});
-
-medicalClient.interceptors.request.use((config) => {
-    const token = localStorage.getItem('aura_token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-});
+import axiosClient from "./axiosClient";
 
 const medicalApi = {
+    // --- PHÂN HỆ BỆNH NHÂN ---
     getPatientProfile: (): Promise<PatientProfile> => 
-        medicalClient.get("/medical-records/patients/me").then(res => res.data),
+        axiosClient.get("/patients/me"),
     
     updateProfile: (data: PatientProfile): Promise<void> => 
-        medicalClient.put("/medical-records/patients/me", data),
+        axiosClient.put("/patients/me", data),
 
     getExaminationHistory: (): Promise<Examination[]> => 
-        medicalClient.get("/medical-records/patients/examinations").then(res => res.data),
+        axiosClient.get("/patients/examinations"),
 
-    // BỔ SUNG HÀM NÀY
     getReportData: (examId: string): Promise<any> => 
-        medicalClient.get(`/medical-records/reports/${examId}`).then(res => res.data),
+        axiosClient.get(`/medical-records/reports/${examId}`),
 
+    // --- PHÂN HỆ PHÒNG KHÁM & BÁC SĨ ---
     getClinics: (): Promise<Clinic[]> => 
-        medicalClient.get("/auth/clinics").then(res => res.data),
+        axiosClient.get("/auth/clinics"),
 
-    getWaitingList: (clinicId?: string): Promise<Examination[]> => 
-        medicalClient.get("/medical-records/examinations/queue", { params: { clinicId } }).then(res => res.data),
+    // FIX LỖI 400: clinicId là bắt buộc để Backend lọc danh sách hàng đợi
+    getWaitingList: (clinicId: string): Promise<Examination[]> => 
+        axiosClient.get("/medical-records/examinations/queue", { 
+            params: { clinicId } 
+        }),
 
+    // API xác nhận chẩn đoán (Verify)
     verifyDiagnosis: (id: string, data: { doctorNotes: string; finalDiagnosis: string }): Promise<any> => 
-        medicalClient.put(`/medical-records/examinations/${id}/verify`, data),
+        axiosClient.put(`/medical-records/examinations/${id}/verify`, data),
 
-    getStats: (clinicId: string): Promise<ClinicStats> => 
-        medicalClient.get("/medical-records/examinations/stats", { params: { clinicId } }).then(res => res.data),
+    // FIX LỖI 400: clinicId là bắt buộc cho báo cáo Dashboard
+    getStats: (clinicId: string): Promise<ClinicStats> => {
+        if (!clinicId) return Promise.reject("ClinicId is required");
+        return axiosClient.get("/medical-records/examinations/stats", { 
+            params: { clinicId } 
+        });
+    },
 
-    hardwareCapture: (formData: FormData): Promise<{ imageId: string }> => 
-        medicalClient.post("/imaging/hardware/capture", formData, {
-            headers: { "Content-Type": "multipart/form-data" }
-        }).then(res => res.data),
-        getExaminationById: (id: string): Promise<Examination> =>
-        medicalClient.get(`/medical-records/examinations/${id}`).then(res => res.data),
-
-    // Dùng cho ClinicExamDetail (Alias cho getExaminationById hoặc endpoint riêng nếu có)
-    getExaminationDetail: (id: string): Promise<any> =>
-        medicalClient.get(`/medical-records/examinations/${id}`).then(res => res.data),
-
-    // Dùng cho việc bác sĩ cập nhật chẩn đoán sơ bộ
+    // Cập nhật chẩn đoán (Diagnosis)
     updateDiagnosis: (id: string, data: { diagnosisResult: string; doctorNotes: string }): Promise<any> =>
-        medicalClient.put(`/medical-records/examinations/${id}/diagnosis`, data)
+        axiosClient.put(`/medical-records/examinations/${id}/diagnosis`, data),
+
+    // Hàm tạo bác sĩ mới (Dùng cho Clinic Admin)
+    createDoctor: (data: any): Promise<void> => 
+        axiosClient.post("/auth/create-doctor", data),
+
+    // Lấy chi tiết ca khám theo ID
+    getExaminationById: (id: string): Promise<Examination> =>
+        axiosClient.get(`/medical-records/examinations/${id}`),
+
+    // Hàm alias cho getExaminationById (nếu các file khác đang gọi tên này)
+    getExaminationDetail: (id: string): Promise<any> =>
+        axiosClient.get(`/medical-records/examinations/${id}`),
+
+    // --- HỖ TRỢ PHẦN CỨNG & ẢNH ---
+    hardwareCapture: (formData: FormData): Promise<{ imageId: string }> => 
+        axiosClient.post("/imaging/hardware/capture", formData, {
+            headers: { "Content-Type": "multipart/form-data" }
+        }),
 };
 
 export default medicalApi;

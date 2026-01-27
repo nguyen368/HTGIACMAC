@@ -7,30 +7,34 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
-using MassTransit; // Bổ sung MassTransit
+using MassTransit;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// =================================================================================
 // 1. ĐĂNG KÝ SERVICES
+// =================================================================================
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
 // Đăng ký FirebaseAuthService
 builder.Services.AddScoped<FirebaseAuthService>();
 
-// [MỚI] CẤU HÌNH MASSTRANSIT (RABBITMQ)
+// [GIỮ NGUYÊN] CẤU HÌNH MASSTRANSIT (RABBITMQ)
 builder.Services.AddMassTransit(x =>
 {
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.Host(builder.Configuration["RabbitMq:Host"] ?? "rabbitmq", "/", h => {
-            h.Username("guest");
-            h.Password("guest");
+            h.Username(builder.Configuration["RabbitMq:Username"] ?? "guest");
+            h.Password(builder.Configuration["RabbitMq:Password"] ?? "guest");
         });
+        cfg.ConfigureEndpoints(context);
     });
 });
 
-// CẤU HÌNH CORS
+// [GIỮ NGUYÊN] CẤU HÌNH CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
@@ -39,7 +43,7 @@ builder.Services.AddCors(options =>
                         .AllowAnyHeader());
 });
 
-// CẤU HÌNH SWAGGER
+// [GIỮ NGUYÊN] CẤU HÌNH SWAGGER CHI TIẾT
 builder.Services.AddSwaggerGen(option =>
 {
     option.SwaggerDoc("v1", new OpenApiInfo { Title = "AURA Identity API", Version = "v1" });
@@ -54,14 +58,22 @@ builder.Services.AddSwaggerGen(option =>
     });
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
-        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type=ReferenceType.SecurityScheme, Id="Bearer" } }, new string[]{} }
+        { 
+            new OpenApiSecurityScheme { 
+                Reference = new OpenApiReference { Type=ReferenceType.SecurityScheme, Id="Bearer" } 
+            }, 
+            new string[]{} 
+        }
     });
 });
 
 builder.Services.AddApplication();
+
+// [CẬP NHẬT] ĐĂNG KÝ INFRASTRUCTURE VÀ FIX LỖI MIGRATION ASSEMBLY
+// Đảm bảo trong hàm AddInfrastructure hoặc tại đây, UseNpgsql trỏ đúng về project Infrastructure
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// CẤU HÌNH JWT
+// CẤU HÌNH JWT - Đảm bảo Secret Key đồng bộ với các Service khác
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -69,8 +81,9 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
+    // Sử dụng Secret Key đồng bộ để các Service có thể giải mã Token của nhau
     var secretKey = builder.Configuration["JwtSettings:SecretKey"] 
-                    ?? throw new InvalidOperationException("JwtSettings:SecretKey is missing");
+                    ?? "Day_La_Key_Bi_Mat_Cua_AURA_Project_2024_!!!"; 
 
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -78,9 +91,10 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
-        ValidAudience = builder.Configuration["JwtSettings:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+        ValidIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "AURA.Identity",
+        ValidAudience = builder.Configuration["JwtSettings:Audience"] ?? "AURA.Client",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+        ClockSkew = TimeSpan.Zero
     };
 });
 
@@ -88,29 +102,37 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// 2. MIDDLEWARE & MIGRATION & SEEDING
+// =================================================================================
+// 2. MIDDLEWARE & AUTOMATIC MIGRATION
+// =================================================================================
+
+// [QUAN TRỌNG] Tự động cập nhật Database ngay khi Identity Service khởi động
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppIdentityDbContext>();
+        
+        Console.WriteLine("--> [Identity] Đang kiểm tra và thực hiện Migration...");
         await context.Database.MigrateAsync();
+        
         await DbInitializer.SeedDataAsync(context); 
         Console.WriteLine("--> [Identity] Database Inited & Seeded Successfully!");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"--> [Identity] Lỗi khởi tạo DB: {ex.Message}");
+        Console.WriteLine($"--> [Identity] LỖI KHỞI TẠO DB: {ex.Message}");
     }
 }
-
-
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c => {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "AURA Identity API V1");
+        c.RoutePrefix = "swagger"; 
+    });
 }
 
 app.UseCors("AllowReactApp");

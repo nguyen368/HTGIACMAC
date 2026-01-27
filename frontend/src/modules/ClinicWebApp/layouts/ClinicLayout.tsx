@@ -1,38 +1,65 @@
-import React from "react";
-import { Outlet } from "react-router-dom";
-// SỬA ĐƯỜNG DẪN: Trỏ đúng vào thư mục Sidebar mới (3 cấp từ layouts)
-import Sidebar from "../../../components/Sidebar/Sidebar"; 
-import "../pages/Upload/ClinicUploadPage.css"; 
+import React from 'react';
+import { Outlet } from 'react-router-dom';
+import Sidebar from '../../../components/Sidebar/Sidebar';
+import { useAuth } from '../../../context/AuthContext';
 
 const ClinicLayout: React.FC = () => {
-  // Logic điều hướng chính đã được Sidebar.tsx đảm nhận dựa trên Role 'clinicadmin'
-  // Tuy nhiên chúng ta giữ nguyên header và cấu trúc container của bạn
+  const { user, logout } = useAuth();
 
   return (
-    <div className="clinic-main-layout" style={{ display: 'flex' }}>
-      {/* 1. Tích hợp Sidebar hệ thống vào bên trái */}
+    <div className="clinic-main-layout" style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
       <Sidebar />
+      
+      <div className="layout-content-area" style={{ marginLeft: '250px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* HEADER CHỨA THÔNG TIN USER VÀ NÚT THOÁT */}
+        <header style={{ 
+          height: '70px', 
+          background: '#fff', 
+          padding: '0 30px', 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10
+        }}>
+          <div className="header-left">
+            <h2 style={{ fontSize: '1.1rem', margin: 0, color: '#1e293b' }}>
+              🏥 Cổng thông tin Phòng khám
+            </h2>
+          </div>
 
-      {/* 2. Khu vực nội dung bên phải */}
-      <div className="container" style={{ marginLeft: '250px', width: 'calc(100% - 250px)', padding: 0, minHeight: '100vh' }}>
-        
-        {/* Giữ nguyên Header cũ của bạn */}
-        <div className="header" style={{ padding: '15px 30px', background: '#fff', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="logo-text"><h1>AURA CLINIC MANAGER</h1></div>
-          <div style={{ display: 'flex', gap: 15, alignItems: 'center' }}>
-            <span className="badge warning">Staff Portal</span>
-            <div style={{ width: 35, height: 35, background: '#3b82f6', borderRadius: '50%', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <i className="fas fa-user-md"></i>
+          <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user?.fullName}</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'capitalize' }}>{user?.role}</div>
             </div>
+            
+            <button 
+              onClick={logout} 
+              style={{ 
+                padding: '8px 16px', 
+                background: '#fee2e2', 
+                color: '#ef4444', 
+                border: '1px solid #fecaca', 
+                borderRadius: '6px', 
+                cursor: 'pointer',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <i className="fas fa-sign-out-alt"></i> Thoát
+            </button>
           </div>
-        </div>
+        </header>
 
-        {/* Khu vực render các trang con (Dashboard, Queue, Upload...) */}
-        <div className="main-content" style={{ padding: '20px' }}>
-          <div className="services-container" style={{ background: 'transparent', padding: 0, boxShadow: 'none' }}>
-            <Outlet /> 
-          </div>
-        </div>
+        <main style={{ padding: '30px', flex: 1 }}>
+          {/* Nơi hiển thị Dashboard, Doctor Management, Queue... */}
+          <Outlet />
+        </main>
       </div>
     </div>
   );

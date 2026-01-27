@@ -63,6 +63,9 @@ namespace AURA.Services.Identity.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CitizenId")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -82,6 +85,9 @@ namespace AURA.Services.Identity.Infrastructure.Migrations
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
 
                     b.Property<string>("Role")

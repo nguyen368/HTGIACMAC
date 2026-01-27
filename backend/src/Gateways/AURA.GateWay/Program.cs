@@ -3,26 +3,25 @@ using Ocelot.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load cấu hình Ocelot
-builder.Configuration.AddJsonFile("ocelot.json", optional: false, reloadOnChange: true);
+builder.Configuration
+    .SetBasePath(builder.Environment.ContentRootPath)
+    .AddJsonFile("appsettings.json", true, true)
+    .AddJsonFile("Ocelot.json", optional: false, reloadOnChange: true)
+    .AddEnvironmentVariables();
 
-// Add Ocelot
 builder.Services.AddOcelot(builder.Configuration);
 
-// Add CORS (Cho phép Frontend gọi vào)
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("CorsPolicy",
-        builder => builder.AllowAnyOrigin()
-                          .AllowAnyMethod()
-                          .AllowAnyHeader());
+builder.Services.AddCors(options => {
+    options.AddPolicy("CorsPolicy", policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 });
 
 var app = builder.Build();
 
 app.UseCors("CorsPolicy");
 
-// Kích hoạt Ocelot Middleware
+// [CỰC KỲ QUAN TRỌNG]: Phải có dòng này để SignalR Handshake không bị hủy
+app.UseWebSockets();
+
 await app.UseOcelot();
 
 app.Run();

@@ -4,30 +4,29 @@ namespace AURA.Services.MedicalRecord.Domain.Entities;
 
 public class Patient : AggregateRoot
 {
-    // --- 1. Properties ---
     public Guid UserId { get; private set; } 
-    public Guid ClinicId { get; private set; } // [BỔ SUNG] Để lọc theo phòng khám
+    public Guid ClinicId { get; private set; } 
     public string FullName { get; private set; }
+    public string Email { get; private set; } // [BỔ SUNG]
     public DateTime DateOfBirth { get; private set; }
     public string Gender { get; private set; }
     public string PhoneNumber { get; private set; }
     public string Address { get; private set; }
 
-    // --- 2. Relationships ---
     private readonly List<MedicalHistory> _medicalHistories = new();
     public IReadOnlyCollection<MedicalHistory> MedicalHistories => _medicalHistories.AsReadOnly();
 
-    // --- 3. Constructors ---
-    public Patient(Guid userId, Guid clinicId, string fullName, DateTime dob, string gender, string phoneNumber, string address)
+    public Patient(Guid userId, Guid clinicId, string fullName, DateTime dob, string gender, string phoneNumber, string address, string email = "")
     {
         Id = Guid.NewGuid();
         UserId = userId;
-        ClinicId = clinicId; // [CẬP NHẬT]
+        ClinicId = clinicId;
         FullName = fullName;
         DateOfBirth = dob;
         Gender = gender;
         PhoneNumber = phoneNumber;
         Address = address;
+        Email = email;
     }
 
     private Patient()
@@ -36,9 +35,9 @@ public class Patient : AggregateRoot
         Gender = null!;
         PhoneNumber = null!;
         Address = null!;
+        Email = string.Empty;
     }
 
-    // --- 4. Methods ---
     public void UpdateInfo(string fullName, DateTime dob, string gender, string phone, string address)
     {
         FullName = fullName;

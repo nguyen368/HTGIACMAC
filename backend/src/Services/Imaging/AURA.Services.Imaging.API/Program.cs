@@ -3,14 +3,21 @@ using AURA.Services.Imaging.Infrastructure.Data;
 using AURA.Services.Imaging.Infrastructure.Services; 
 using Microsoft.EntityFrameworkCore;
 using MassTransit;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Cấu hình Database (PostgreSQL)
-builder.Services.AddDbContext<ImagingDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// =================================================================================
+// 1. CẤU HÌNH DỊCH VỤ (SERVICES)
+// =================================================================================
 
-// 2. Cấu hình MassTransit (RabbitMQ) - Đóng vai trò Publisher
+// [FIX DỨT ĐIỂM LỖI MIGRATION]
+// Khai báo rõ ràng MigrationsAssembly để EF Core tìm thấy các file trong Infrastructure
+builder.Services.AddDbContext<ImagingDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+    x => x.MigrationsAssembly("AURA.Services.Imaging.Infrastructure")));
+
+// 2. Cấu hình MassTransit (RabbitMQ) - Giữ nguyên logic Publisher của bạn
 builder.Services.AddMassTransit(x =>
 {
     x.UsingRabbitMq((context, cfg) =>
@@ -25,31 +32,57 @@ builder.Services.AddMassTransit(x =>
 });
 
 // 3. Đăng ký các Service (Dependency Injection)
+// Giữ nguyên fix lỗi 500 thiếu IHttpClientFactory của bạn
+builder.Services.AddHttpClient(); 
 builder.Services.AddScoped<IImageUploader, CloudinaryUploader>(); 
 
-// Các cấu hình cơ bản của Web API
-builder.Services.AddControllers();
+// [SỬA LỖI INVALID DATE] - Giữ nguyên cấu hình camelCase chuẩn React
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var builderApp = builder.Build(); // Đổi tên biến tránh trùng lặp nếu có logic phức tạp sau này
+var app = builder.Build();
 
-// 4. Pipeline
-if (builderApp.Environment.IsDevelopment())
+// =================================================================================
+// 2. CẤU HÌNH PIPELINE (MIDDLEWARE)
+// =================================================================================
+
+// [FIX 404 SWAGGER] Cấu hình RoutePrefix để khớp với port 5003
+if (app.Environment.IsDevelopment())
 {
-    builderApp.UseSwagger();
-    builderApp.UseSwaggerUI();
+    app.UseSwagger();
+    app.UseSwaggerUI(c => {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "AURA Imaging API V1");
+        c.RoutePrefix = "swagger"; // Truy cập tại: http://localhost:5003/swagger/index.html
+    });
 }
 
-builderApp.UseHttpsRedirection();
-builderApp.UseAuthorization();
-builderApp.MapControllers();
+// Bỏ UseHttpsRedirection nếu chạy trong Docker để tránh lỗi Certificate
+// app.UseHttpsRedirection(); 
 
-// Tự động Migrate DB khi khởi chạy
-using (var scope = builderApp.Services.CreateScope())
+app.UseAuthorization();
+app.MapControllers();
+
+// [CẬP NHẬT LOG] Tự động Migrate DB khi khởi chạy
+using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ImagingDbContext>();
-    db.Database.Migrate();
+    try 
+    {
+        Console.WriteLine("---- IMAGING SERVICE: Đang kiểm tra và cập nhật Database ----");
+        db.Database.Migrate(); 
+        Console.WriteLine("---- IMAGING SERVICE: Migration THÀNH CÔNG! ----");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"---- IMAGING SERVICE LỖI MIGRATION: {ex.Message} ----");
+    }
 }
 
-builderApp.Run();
+app.Run();

@@ -7,6 +7,7 @@ export interface MedicalHistory {
 
 export interface PatientProfile {
     id?: string;
+    userId?: string; 
     fullName: string;
     dateOfBirth: string;
     gender: string;
@@ -27,6 +28,7 @@ export interface Examination {
     patientId: string;
     patientName?: string;
     examDate: string;
+    createdDate: string; 
     imageUrl: string;
     heatmapUrl?: string;
     aiDiagnosis?: string;
@@ -34,8 +36,8 @@ export interface Examination {
     aiRiskScore: number;
     status: 'Pending' | 'Analyzed' | 'Verified' | 'Rejected';
     doctorNotes?: string;
+    finalDiagnosis?: string;
     diagnosisResult?: string;
-    result?: string; // Trường này dùng cho kết luận hiển thị
 }
 
 export interface ClinicStats {
