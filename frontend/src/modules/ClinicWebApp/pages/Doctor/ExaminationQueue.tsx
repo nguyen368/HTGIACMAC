@@ -1,105 +1,79 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import medicalApi from "../../../../api/medicalApi";
-import { useSignalR } from "../../../../context/SignalRContext";
-import { toast } from "react-toastify";
-import { Examination } from "../../../../types/medical";
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import medicalApi from '../../../../api/medicalApi';
+import { useAuth } from '../../../../context/AuthContext';
+import { Examination } from '../../../../types/medical';
 
 const ExaminationQueue: React.FC = () => {
-  const [queue, setQueue] = useState<Examination[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const navigate = useNavigate();
-  const { lastNotification, connection } = useSignalR(); 
+    const [patients, setPatients] = useState<Examination[]>([]);
+    const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
+    const { user } = useAuth();
 
-  const fetchQueue = async () => {
-    try {
-      setLoading(true);
-      const res = await medicalApi.getWaitingList();
-      setQueue(res || []);
-    } catch (error) {
-      toast.error("Không thể tải danh sách hàng chờ.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    const fetchQueue = async () => {
+        // [FIX]: Phải lấy clinicId từ user để truyền vào API
+        const clinicId = user?.clinicId;
+        if (!clinicId) {
+            setLoading(false);
+            return;
+        }
 
-  useEffect(() => {
-    fetchQueue();
-  }, []);
+        try {
+            // [FIX TS2554]: Đã truyền đúng clinicId để build thành công
+            const data = await medicalApi.getWaitingList(clinicId);
+            setPatients(data || []);
+        } catch (error) {
+            console.error("Lỗi tải danh sách chờ:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-  useEffect(() => {
-    const userData = localStorage.getItem("user") || localStorage.getItem("aura_user");
-    const user = userData ? JSON.parse(userData) : null;
+    useEffect(() => {
+        if (user?.clinicId) {
+            fetchQueue();
+        }
+    }, [user?.clinicId]);
 
-    if (connection && user?.clinicId) {
-      connection.invoke("JoinClinicChannel", user.clinicId)
-        .catch(err => console.error("Lỗi tham gia kênh SignalR:", err));
-        
-      return () => {
-        connection.invoke("LeaveClinicChannel", user.clinicId).catch(() => {});
-      };
-    }
-  }, [connection]);
+    if (loading) return <div style={{padding: '50px', textAlign: 'center'}}>Đang tải danh sách hàng đợi...</div>;
 
-  useEffect(() => {
-    if (lastNotification?.Type === "AiFinished" || lastNotification?.type === "AiFinished") {
-      toast.info(`Phát hiện kết quả AI mới cho bệnh nhân: ${lastNotification.PatientName || 'Hệ thống'}`);
-      fetchQueue();
-    }
-  }, [lastNotification]);
-
-  const getRiskBadge = (level: string) => {
-    switch (level) {
-      case "High": return <span className="badge bg-danger">🔴 NGUY CƠ CAO</span>;
-      case "Medium": return <span className="badge bg-warning text-dark">🟡 Trung bình</span>;
-      case "Low": return <span className="badge bg-success">🟢 Thấp</span>;
-      default: return <span className="badge bg-secondary">⚪ Đang chờ AI...</span>;
-    }
-  };
-
-  return (
-    <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <div>
-          <h2 style={{ fontWeight: 'bold', color: '#2c3e50' }}>📋 Danh sách chờ khám</h2>
+    return (
+        <div className="queue-container">
+            <h2 className="page-title">Hàng đợi khám bệnh</h2>
+            <div className="table-responsive">
+                <table className="modern-table">
+                    <thead>
+                        <tr>
+                            <th>Bệnh nhân</th>
+                            <th>Ngày đăng ký</th>
+                            <th>Mức độ rủi ro</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {patients.length > 0 ? patients.map((p) => (
+                            <tr key={p.id}>
+                                <td><b>{p.patientName}</b></td>
+                                <td>{new Date(p.createdDate).toLocaleString('vi-VN')}</td>
+                                <td>
+                                    <span className={`risk-badge ${p.aiRiskLevel?.toLowerCase()}`}>
+                                        {p.aiRiskLevel} ({p.aiRiskScore}%)
+                                    </span>
+                                </td>
+                                <td>
+                                    <button onClick={() => navigate(`/clinic/exam/${p.id}`)} className="btn-examine">
+                                        Vào khám
+                                    </button>
+                                </td>
+                            </tr>
+                        )) : (
+                            <tr><td colSpan={4} style={{textAlign: 'center', padding: '30px'}}>Hàng đợi hiện đang trống</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <button className="btn btn-outline-primary shadow-sm" onClick={fetchQueue}>🔄 Làm mới</button>
-      </div>
-      
-      <div className="table-responsive shadow-sm rounded">
-        <table className="table table-hover align-middle mb-0" style={{ backgroundColor: 'white' }}>
-          <thead className="table-light">
-            <tr>
-              <th>Thứ tự</th>
-              <th>Bệnh nhân</th>
-              <th>Thời gian chụp</th>
-              <th>AI Đánh giá</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={5} className="text-center py-4">Đang tải...</td></tr>
-            ) : queue.length > 0 ? (
-              queue.map((exam, index) => (
-                <tr key={exam.id} className={exam.aiRiskLevel === 'High' ? "table-danger" : ""}>
-                  <td><b>#{index + 1}</b></td>
-                  <td>{exam.patientName || "Chưa có tên"}</td>
-                  <td>{new Date(exam.examDate).toLocaleString('vi-VN')}</td>
-                  <td>{getRiskBadge(exam.aiRiskLevel)}</td>
-                  <td>
-                    <button className="btn btn-primary btn-sm" onClick={() => navigate(`/doctor/exam/${exam.id}`)}>🔍 Chẩn đoán</button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr><td colSpan={5} className="text-center py-5">Hàng chờ trống.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ExaminationQueue;

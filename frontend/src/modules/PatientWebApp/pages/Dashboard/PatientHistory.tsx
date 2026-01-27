@@ -1,149 +1,126 @@
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
+import imagingApi from '../../../../api/imagingApi';
+// @ts-ignore
 import medicalApi from '../../../../api/medicalApi';
-// Import interface để định nghĩa kiểu dữ liệu
-import { Examination } from '../../../../types/medical';
-import './PatientHistory.css';
+// @ts-ignore
+import { useAuth } from '../../../../context/AuthContext';
+import '../Dashboard/PatientHome.css';
 
 const PatientHistory: React.FC = () => {
-    // 1. Sửa lỗi SetStateAction<never[]>: Khai báo kiểu Examination cho mảng history
-    const [history, setHistory] = useState<Examination[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [filter, setFilter] = useState<string>('all'); // Bộ lọc trạng thái
+    const { user } = useAuth();
+    const [history, setHistory] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchHistory();
-    }, []);
-
-    const fetchHistory = async () => {
-        try {
-            setLoading(true);
-            // API trả về Promise<Examination[]>
-            const data = await medicalApi.getExaminationHistory();
-            setHistory(data || []);
-        } catch (err) {
-            console.error("Lỗi tải lịch sử:", err);
-        } finally {
-            setLoading(false);
+        const patientId = (user as any)?.id || (user as any)?.userId || (user as any)?.sub || "";
+        if (patientId) {
+            imagingApi.getImagesByPatient(patientId)
+                .then((data: any) => {
+                    console.log("🔥 DỮ LIỆU MỚI NHẤT TỪ API:", data); 
+                    setHistory(data || []);
+                })
+                .finally(() => setLoading(false));
         }
+    }, [user]);
+
+    // [ĐÃ SỬA] Hàm hiển thị chi tiết (Không gọi API Medical nữa để tránh lỗi)
+    const handleViewReport = (item: any) => {
+        // Lấy dữ liệu ngay tại dòng đó
+        const diagnosis = item.predictionResult || item.PredictionResult || "Đang xử lý";
+        const score = item.confidenceScore || item.ConfidenceScore || "N/A";
+        const dateStr = item.createdAt || item.uploadedAt || new Date().toISOString();
+        const date = new Date(dateStr).toLocaleString('vi-VN');
+
+        alert(
+            `📊 KẾT QUẢ SƠ BỘ TỪ AI:\n` +
+            `--------------------------\n` +
+            `🕒 Ngày chụp: ${date}\n` +
+            `🩺 Chẩn đoán: ${diagnosis}\n` +
+            `🎯 Độ tin cậy: ${score}%\n\n` +
+            `*Vui lòng chờ bác sĩ xác nhận cuối cùng.`
+        );
     };
-
-    // 2. Sửa lỗi Parameter 'examId' implicitly has an 'any' type: Định nghĩa kiểu string
-    const handleViewReport = async (examId: string) => {
-        try {
-            // Gọi hàm getReportData (Đảm bảo hàm này đã được thêm vào file medicalApi.ts)
-            const report = await medicalApi.getReportData(examId);
-            
-            // 3. Giữ nguyên 100% logic alert truy xuất nguồn gốc (Traceability) của bạn
-            alert(
-                `📄 PHIẾU KẾT QUẢ ĐIỆN TỬ - AURA SYSTEM\n` +
-                `-----------------------------------\n` +
-                `Bệnh nhân: ${report.patientInfo?.name || 'N/A'}\n` +
-                `Ngày khám: ${new Date(report.printedAt).toLocaleDateString('vi-VN')}\n` +
-                `Kết luận: ${report.diagnosisResult}\n\n` +
-                `🔍 THÔNG TIN AI (TRUY XUẤT):\n` +
-                `- Phiên bản AI: ${report.technicalTraceability?.algorithmVersion || 'v1.0'}\n` +
-                `- Confidence Score: ${report.technicalTraceability?.aiConfidenceScore || 0}%\n` +
-                `- Mã thiết bị: ${report.technicalTraceability?.systemName || 'AURA-SCANNER'}`
-            );
-        } catch (error) {
-            alert("Báo cáo đang được khởi tạo hoặc chưa có kết luận cuối cùng từ Bác sĩ.");
-        }
-    };
-
-    // Logic lọc danh sách dựa trên trạng thái (Giữ nguyên logic cũ)
-    const filteredHistory = history.filter(item => {
-        if (filter === 'all') return true;
-        return item.status === filter;
-    });
-
-    if (loading) return (
-        <div className="p-5 text-center">
-            <div className="spinner-border text-primary" role="status"></div>
-            <div className="mt-2">Đang tải lịch sử chẩn đoán từ AURA Cloud...</div>
-        </div>
-    );
 
     return (
-        <div className="history-container animate-fade-in">
-            {/* Header với thông tin dự án */}
-            <div className="history-header d-flex justify-content-between align-items-center">
-                <div>
-                    <h3>Lịch sử chẩn đoán võng mạc</h3>
-                    <p className="text-muted small">Mọi dữ liệu đều được lưu trữ bảo mật qua hệ thống Microservices</p>
-                </div>
-                <div className="text-right">
-                    <span className="project-code">Project: SP26SE025</span>
-                    <button className="btn btn-sm btn-outline-primary ms-2" onClick={fetchHistory}>
-                        <i className="fas fa-sync"></i> Làm mới
-                    </button>
-                </div>
+        <div className="dashboard-home animate-fade-in">
+            <div className="welcome-banner" style={{background: 'var(--primary-800)'}}>
+                <div className="welcome-content"><h2>Lịch sử chẩn đoán 📂</h2><p>Dữ liệu y tế cá nhân hóa.</p></div>
             </div>
-
-            {/* Thanh điều hướng bộ lọc (Filter bar) */}
-            <div className="filter-bar mb-4">
-                <button className={`filter-btn ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Tất cả</button>
-                <button className={`filter-btn ${filter === 'Verified' ? 'active' : ''}`} onClick={() => setFilter('Verified')}>Đã xác thực</button>
-                <button className={`filter-btn ${filter === 'Pending' ? 'active' : ''}`} onClick={() => setFilter('Pending')}>Đang xử lý</button>
-            </div>
-
-            {filteredHistory.length === 0 ? (
-                <div className="no-data-card text-center p-5">
-                    <i className="fas fa-folder-open fa-3x mb-3 text-light"></i>
-                    <div className="no-data">Bạn chưa thực hiện ca sàng lọc nào.</div>
-                </div>
-            ) : (
-                <div className="history-list">
-                    {/* 4. Sửa lỗi Property 'status' does not exist on type 'never': Định nghĩa item là Examination */}
-                    {filteredHistory.map((item: Examination) => (
-                        <div key={item.id} className="history-card shadow-sm">
-                            <div className="card-top">
-                                <span className="date">📅 Ngày khám: {new Date(item.examDate).toLocaleDateString('vi-VN')}</span>
-                                <div className={`status-badge ${item.status}`}>
-                                    {item.status === 'Verified' ? '✓ Đã xác thực' : '⏳ Đang xử lý'}
-                                </div>
-                            </div>
+            <div className="pro-card mt-4 p-0">
+                <table style={{width:'100%', borderCollapse: 'collapse'}}>
+                    <thead style={{background: '#f8fafc', borderBottom: '2px solid #eee'}}>
+                        <tr style={{textAlign:'left'}}><th className="p-3">Ngày</th><th className="p-3">Ảnh</th><th className="p-3">Kết quả</th><th className="p-3">Thao tác</th></tr>
+                    </thead>
+                    <tbody>
+                        {history.map((item, index) => {
+                            // [MAPPING DỮ LIỆU CHUẨN]
                             
-                            <div className="card-body">
-                                <div className="img-wrapper">
-                                    <img src={item.imageUrl} alt="Eye Scan" className="thumb" />
-                                    <div className="img-overlay" onClick={() => window.open(item.imageUrl, '_blank')}>
-                                        <i className="fas fa-search-plus"></i>
-                                    </div>
-                                </div>
-                                
-                                <div className="info">
-                                    <p className="result">
-                                        <b>Kết luận bác sĩ:</b> <br />
-                                        <span>{item.diagnosisResult || item.result || "Đang chờ bác sĩ chuyên khoa duyệt..."}</span>
-                                    </p>
-                                    <div className={`risk-box ${item.aiRiskLevel}`}>
-                                        <div className="risk-label">Rủi ro AI dự đoán:</div>
-                                        <div className="risk-value">
-                                            {item.aiRiskLevel} <span>({item.aiRiskScore}%)</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            // 1. Ngày tháng (JSON trả về createdAt)
+                            const dateStr = item.createdAt || item.uploadedAt || new Date().toISOString();
+                            
+                            // 2. Ảnh (JSON trả về originalImageUrl) - Ưu tiên cái này!
+                            const imgSrc = item.originalImageUrl || item.imageUrl || item.ImageUrl;
 
-                            <div className="card-footer">
-                                <button 
-                                    className="btn-report" 
-                                    onClick={() => handleViewReport(item.id)} 
-                                    disabled={item.status !== 'Verified'}
-                                    title={item.status !== 'Verified' ? "Cần bác sĩ duyệt để xem báo cáo" : "Xem phiếu kết quả điện tử"}
-                                >
-                                    <i className="fas fa-file-signature"></i> Xem báo cáo chi tiết
-                                </button>
-                                <button className="btn-img" onClick={() => window.open(item.imageUrl, '_blank')}>
-                                    <i className="fas fa-eye"></i> Ảnh gốc
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+                            // 3. Kết quả (JSON trả về predictionResult)
+                            const diagnosis = item.predictionResult || "Đang phân tích...";
+                            
+                            // 4. Trạng thái (JSON trả về status = 2)
+                            const isCompleted = Number(item.status) === 2 || !!item.predictionResult;
+
+                            return (
+                                <tr key={item.id || index} style={{borderBottom:'1px solid #f1f5f9'}}>
+                                    <td className="p-3">
+                                        {new Date(dateStr).toLocaleDateString('vi-VN', {
+                                            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
+                                        })}
+                                    </td>
+                                    
+                                    <td className="p-3">
+                                        {imgSrc ? (
+                                            <div style={{width: '60px', height: '60px'}}>
+                                                 <img 
+                                                    src={imgSrc} 
+                                                    style={{width:'100%', height:'100%', borderRadius:'6px', objectFit: 'cover', border: '1px solid #ddd'}} 
+                                                    alt="Scan"
+                                                    onError={(e) => e.currentTarget.style.display = 'none'}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div style={{width:'60px', height:'60px', background:'#eee', borderRadius:'6px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'10px', color:'#999'}}>
+                                                No IMG
+                                            </div>
+                                        )}
+                                    </td>
+
+                                    <td className="p-3">
+                                        <span style={{
+                                            color: isCompleted ? '#16a34a' : '#ea580c',
+                                            fontWeight: '600',
+                                            background: isCompleted ? '#dcfce7' : '#ffedd5',
+                                            padding: '5px 10px',
+                                            borderRadius: '15px',
+                                            fontSize: '13px'
+                                        }}>
+                                            {isCompleted ? diagnosis : "⏳ Đang xử lý..."}
+                                        </span>
+                                    </td>
+
+                                    <td className="p-3">
+                                        <button className="btn-sm" 
+                                            onClick={() => handleViewReport(item)} 
+                                            style={{border:'1px solid #0ea5e9', color:'#0ea5e9', background:'white', padding:'6px 12px', borderRadius:'6px', cursor:'pointer', fontSize:'13px'}}
+                                        >
+                                            <i className="fas fa-file-medical"></i> Chi tiết
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };
-
 export default PatientHistory;

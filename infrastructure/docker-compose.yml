@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. DATABASE
+  # 1. DATABASE - Nền tảng dữ liệu
   aura.db:
     image: postgres:15-alpine
     container_name: aura.db
@@ -23,7 +23,7 @@ services:
     networks:
       - aura-network
 
-  # 2. RabbitMQ
+  # 2. RabbitMQ - Trục gửi nhận tin nhắn AI
   rabbitmq:
     image: rabbitmq:3-management
     container_name: aura-rabbitmq
@@ -42,9 +42,10 @@ services:
     networks:
       - aura-network
 
-  # 3. IDENTITY SERVICE
+  # 3. IDENTITY SERVICE - Quản lý tài khoản
   identity-service:
     container_name: identity-service
+    restart: always
     build:
       context: ../
       dockerfile: backend/src/Services/Identity/AURA.Services.Identity.API/Dockerfile
@@ -65,9 +66,10 @@ services:
     networks:
       - aura-network
 
-  # 4. MEDICAL RECORD SERVICE
+  # 4. MEDICAL RECORD SERVICE - Bệnh án và CDS
   medical-record-service:
     container_name: medical-record-service
+    restart: always
     build:
       context: ../
       dockerfile: backend/src/Services/MedicalRecord/AURA.Services.MedicalRecord.API/Dockerfile
@@ -85,7 +87,7 @@ services:
     networks:
       - aura-network
 
-  # 5. IMAGING SERVICE
+  # 5. IMAGING SERVICE - Quản lý ảnh gốc
   imaging-service:
     container_name: imaging-service
     restart: always
@@ -108,9 +110,10 @@ services:
     networks:
       - aura-network
 
-  # 6. BILLING SERVICE
+  # 6. BILLING SERVICE - Thanh toán
   billing-service:
     container_name: billing-service
+    restart: always
     build:
       context: ../
       dockerfile: backend/src/Services/Billing/AURA.Services.Billing.API/Dockerfile
@@ -128,9 +131,10 @@ services:
     networks:
       - aura-network
 
-  # 7. NOTIFICATION SERVICE
+  # 7. NOTIFICATION SERVICE - Thông báo SignalR
   notification-service:
     container_name: notification-service
+    restart: always
     build:
       context: ../
       dockerfile: backend/src/Services/Notification/AURA.Services.Notification.API/Dockerfile
@@ -145,7 +149,7 @@ services:
     networks:
       - aura-network
 
-  # 8. AI CORE SERVICE
+  # 8. AI CORE SERVICE - Phân tích AI Deep Learning
   ai-core-service:
     container_name: ai-core-service
     restart: always
@@ -157,24 +161,37 @@ services:
     volumes:
       - ./uploads_data:/app/uploads
       - ./ai_static:/app/static/results
+    deploy:
+      resources:
+        limits:
+          memory: 2G # Giới hạn tránh lag máy khi phân tích AI
     networks:
       - aura-network
 
-  # 9. FRONTEND (React)
+  # 9. FRONTEND (React) - Giao diện AURA
   frontend:
     container_name: aura-frontend
+    restart: always
     build:
       context: ../frontend
       dockerfile: Dockerfile
     ports:
       - "3000:80"
-    restart: always
+    # Đảm bảo các service quan trọng chạy rồi mới khởi động UI
+    depends_on:
+      - identity-service
+      - gateway-service
+    deploy:
+      resources:
+        limits:
+          memory: 512M # Frontend nhẹ nên giới hạn thấp để tiết kiệm RAM
     networks:
       - aura-network
 
-  # 10. API GATEWAY
+  # 10. API GATEWAY - Cửa ngõ trung tâm
   gateway-service:
     container_name: aura-gateway
+    restart: always
     build:
       context: ../
       dockerfile: backend/src/Gateways/AURA.GateWay/Dockerfile
@@ -186,13 +203,10 @@ services:
     depends_on:
       - identity-service
       - medical-record-service
-      - imaging-service
-      - billing-service
-      - notification-service
     networks:
       - aura-network
 
-  # 11. MONITORING - PROMETHEUS
+  # 11. MONITORING - Prometheus
   prometheus:
     image: prom/prometheus
     container_name: aura-prometheus
@@ -203,7 +217,7 @@ services:
     networks:
       - aura-network
 
-  # 12. MONITORING - GRAFANA
+  # 12. MONITORING - Grafana
   grafana:
     image: grafana/grafana
     container_name: aura-grafana
@@ -214,10 +228,11 @@ services:
     networks:
       - aura-network
 
-  # 13. APACHE NIFI
+  # 13. APACHE NIFI - Luồng dữ liệu ETL
   nifi:
     image: apache/nifi:latest
     container_name: aura-nifi
+    restart: always
     ports:
       - "8443:8443"
     environment:
@@ -225,10 +240,14 @@ services:
       - NIFI_WEB_HTTPS_PORT=8443
       - SINGLE_USER_CREDENTIALS_USERNAME=admin
       - SINGLE_USER_CREDENTIALS_PASSWORD=AuraSystem2026!
+    deploy:
+      resources:
+        limits:
+          memory: 2G # NiFi rất nặng, cần giới hạn để không treo máy
     networks:
       - aura-network
 
-  # 14. FIREBASE EMULATOR
+  # 14. FIREBASE EMULATOR - Mô phỏng Firebase
   firebase-emulator:
     image: andreysenov/firebase-tools
     container_name: aura-firebase

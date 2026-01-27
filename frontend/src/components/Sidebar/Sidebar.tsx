@@ -1,96 +1,81 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import jwtDecode from 'jwt-decode'; // Sửa lỗi theo gợi ý: dùng default import
+import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
-interface MenuItem {
-    name: string;
-    path: string;
-    icon: string;
-}
+const Sidebar = () => {
+  const { user, logout } = useAuth();
+  const location = useLocation();
 
-interface MenuGroups {
-    [key: string]: MenuItem[];
-}
+  // CHUẨN HÓA: Chuyển role về chữ thường để so sánh chính xác với dữ liệu từ AuthContext
+  const role = user?.role?.toLowerCase();
 
-const Sidebar: React.FC = () => {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const token = localStorage.getItem('aura_token');
-    
-    if (!token) return null;
-    
-    let userRole: string = '';
-    try {
-        const decoded: any = jwtDecode(token);
-        const roleKey = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
-        userRole = (decoded[roleKey] || decoded.role || '').toLowerCase();
-    } catch (e) {
-        return null;
+  const getMenuItems = () => {
+    if (role === 'patient') {
+      return [
+        { path: '/patient/dashboard', label: 'Trang chủ', icon: 'home' },
+        { path: '/patient/profile', label: 'Hồ sơ của tôi', icon: 'user' },
+        { path: '/patient/history', label: 'Lịch sử khám', icon: 'history' },
+      ];
     }
 
-    const menuItems: MenuGroups = {
-        admin: [
-            { name: 'Dashboard Admin', path: '/admin/dashboard', icon: '📊' },
-            { name: 'Quản lý phòng khám', path: '/admin/users', icon: '🏥' }
-        ],
-        clinicadmin: [
-            { name: 'Tổng quan Clinic', path: '/clinic/dashboard', icon: '📈' },
-            { name: 'Hàng đợi phòng khám', path: '/doctor/queue', icon: '📋' },
-            { name: 'Thiết bị IoT (Test)', path: '/hardware-simulator', icon: '🔧' }
-        ],
-        doctor: [
-            { name: 'Hàng chờ khám', path: '/doctor/queue', icon: '📋' },
-            { name: 'Lịch sử ca khám', path: '/doctor/history', icon: '📜' },
-            { name: 'Thiết bị chụp ảnh', path: '/hardware-simulator', icon: '📸' }
-        ],
-        patient: [
-            { name: 'Trang chủ', path: '/patient/dashboard', icon: '🏠' },
-            { name: 'Hồ sơ sức khỏe', path: '/patient/profile', icon: '👤' },
-            { name: 'Lịch sử khám', path: '/patient/history', icon: '📂' },
-            { name: 'Sàng lọc AI', path: '/patient/upload', icon: '📤' }
-        ]
-    };
+    // Tích hợp cho cả ClinicAdmin và ClinicOwner
+    if (role === 'clinicadmin' || role === 'clinicowner') {
+      return [
+        { path: '/clinic/dashboard', label: 'Báo cáo tổng quan', icon: 'chart-line' },
+        { path: '/clinic/doctors', label: 'Quản lý bác sĩ', icon: 'user-md' },
+        { path: '/clinic/queue', label: 'Danh sách chờ khám', icon: 'list' },
+        { path: '/clinic/upload', label: 'Tải ảnh hàng loạt', icon: 'upload' },
+      ];
+    }
 
-    const currentMenu = menuItems[userRole] || [];
+    if (role === 'doctor') {
+      return [
+        { path: '/clinic/queue', label: 'Danh sách chờ khám', icon: 'list' },
+        { path: '/clinic/history', label: 'Lịch sử chẩn đoán', icon: 'notes-medical' },
+      ];
+    }
 
-    return (
-        <div className="sidebar" style={{ width: '250px', background: '#1a202c', color: 'white', height: '100vh', padding: '20px', position: 'fixed', left: 0, top: 0, zIndex: 1000 }}>
-            <div style={{ marginBottom: '30px', borderBottom: '1px solid #4a5568', paddingBottom: '15px' }}>
-                <h2 style={{ fontSize: '20px', color: '#63b3ed', margin: 0 }}>AURA SYSTEM</h2>
-                <small style={{ color: '#a0aec0' }}>Retinal Health Screening</small>
-            </div>
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-                {currentMenu.map((item) => (
-                    <li 
-                        key={item.path} 
-                        onClick={() => navigate(item.path)}
-                        style={{ 
-                            padding: '12px 15px', 
-                            cursor: 'pointer', 
-                            borderRadius: '8px',
-                            background: location.pathname.includes(item.path) ? '#2d3748' : 'transparent',
-                            color: location.pathname.includes(item.path) ? '#63b3ed' : 'white',
-                            marginBottom: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <span style={{ marginRight: '12px', fontSize: '18px' }}>{item.icon}</span>
-                        <span style={{ fontWeight: location.pathname.includes(item.path) ? 'bold' : 'normal' }}>{item.name}</span>
-                    </li>
-                ))}
-            </ul>
-            <div style={{ position: 'absolute', bottom: '20px', width: '210px' }}>
-                <li 
-                    onClick={() => { localStorage.clear(); navigate('/auth'); }}
-                    style={{ listStyle: 'none', padding: '12px', cursor: 'pointer', color: '#fc8181', display: 'flex', alignItems: 'center', borderTop: '1px solid #4a5568' }}
-                >
-                    <span style={{ marginRight: '12px' }}>🚪</span> Đăng xuất
-                </li>
-            </div>
-        </div>
-    );
+    return [];
+  };
+
+  const menuItems = getMenuItems();
+
+  return (
+    <div className="sidebar" style={{ width: '250px', height: '100vh', background: '#1e293b', color: 'white', position: 'fixed', left: 0, top: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="sidebar-logo" style={{ padding: '25px', borderBottom: '1px solid #334155', textAlign: 'center' }}>
+        <h3 style={{ margin: 0, color: '#38bdf8' }}>AURA AI</h3>
+      </div>
+      
+      <nav className="sidebar-nav" style={{ flex: 1, padding: '20px 0' }}>
+        {menuItems.map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+            style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                padding: '12px 25px', 
+                color: location.pathname === item.path ? '#38bdf8' : '#94a3b8',
+                textDecoration: 'none',
+                background: location.pathname === item.path ? '#334155' : 'transparent',
+                transition: '0.3s'
+            }}
+          >
+            <i className={`fas fa-${item.icon}`} style={{ marginRight: '15px', width: '20px' }}></i>
+            <span>{item.label}</span>
+          </Link>
+        ))}
+      </nav>
+
+      {/* THÊM NÚT ĐĂNG XUẤT NHANH */}
+      <div className="sidebar-footer" style={{ padding: '20px', borderTop: '1px solid #334155' }}>
+        <button onClick={logout} style={{ width: '100%', padding: '10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>
+          <i className="fas fa-sign-out-alt"></i> Đăng xuất
+        </button>
+      </div>
+    </div>
+  );
 };
 
 export default Sidebar;

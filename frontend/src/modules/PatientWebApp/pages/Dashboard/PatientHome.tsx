@@ -1,190 +1,179 @@
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
-import imagingApi from '../../../../api/imagingApi'; // Import API để lấy kết quả mới nhất
+import imagingApi from '../../../../api/imagingApi';
+import './PatientHome.css'; // Giữ lại file CSS cũ để hứng các style cơ bản
 
-// --- Định nghĩa Interface ---
-
-interface User {
-    id?: string;
-    userId?: string;
-    fullName?: string;
-    [key: string]: any;
-}
-
-interface AiDiagnosis {
-    diagnosis?: string;
-    result?: string;
-    [key: string]: any;
-}
-
-interface ExamResult {
-    id: string;
-    uploadedAt: string;
-    aiDiagnosis?: AiDiagnosis;
-    [key: string]: any;
-}
-
-interface PatientHomeProps {
-    user: User | null;
-    setTab?: (tab: string) => void;
-}
-
-const PatientHome: React.FC<PatientHomeProps> = ({ user, setTab }) => {
-    // --- [CODE MỚI] Logic lấy kết quả khám gần nhất ---
-    const [lastExam, setLastExam] = useState<ExamResult | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
+const PatientHome: React.FC<any> = ({ user, setTab }) => {
+    const [recentExams, setRecentExams] = useState<any[]>([]);
+    // [THÊM] normalCount vào state
+    const [stats, setStats] = useState({ totalScans: 0, highRiskCount: 0, normalCount: 0 });
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (user) {
-            const patientId = user.id || user.userId;
-            imagingApi.getImagesByPatient(patientId)
-                .then((data: any) => {
-                    const list = Array.isArray(data) ? data : (data.data || []);
-                    if (list.length > 0) {
-                        // Sắp xếp giảm dần để lấy cái mới nhất
-                        const sorted = list.sort((a: ExamResult, b: ExamResult) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-                        setLastExam(sorted[0]);
-                    }
-                })
-                .catch((err: any) => console.error(err))
-                .finally(() => setLoading(false));
-        }
+        const fetchData = async () => {
+            if (!user) return;
+            const pId = user.id || user.userId || (user as any).sub || "";
+            try {
+                const data: any = await imagingApi.getImagesByPatient(pId);
+                const list = Array.isArray(data) ? data : (data.data || []);
+                
+                if (list.length > 0) {
+                    const sorted = list.sort((a: any, b: any) => {
+                        // Fallback nhiều trường hợp ngày tháng
+                        const dateA = new Date(a.createdAt || a.uploadedAt || a.CreatedAt || 0).getTime();
+                        const dateB = new Date(b.createdAt || b.uploadedAt || b.CreatedAt || 0).getTime();
+                        return dateB - dateA;
+                    });
+
+                    setRecentExams(sorted.slice(0, 5)); // Chỉ lấy 5 cái mới nhất nếu cần hiển thị
+                    
+                    // Tính toán logic Nguy cơ cao / Bình thường
+                    let highRisk = 0;
+                    list.forEach((e: any) => {
+                        const result = e.predictionResult || e.PredictionResult || "";
+                        const status = Number(e.status || e.Status);
+                        // Nếu đã hoàn thành (status=2) và kết quả có chữ "Nguy cơ" hoặc "Bệnh"
+                        if (status === 2 && (result.includes("Nguy cơ") || result.includes("Bệnh") || result.includes("High"))) {
+                            highRisk++;
+                        }
+                    });
+
+                    const total = list.length;
+                    const normal = total - highRisk; // Số còn lại là bình thường hoặc đang xử lý
+
+                    setStats({
+                        totalScans: total,
+                        highRiskCount: highRisk,
+                        normalCount: normal
+                    });
+                }
+            } catch (err) { console.error(err); } 
+            finally { setTimeout(() => setLoading(false), 500); }
+        };
+        fetchData();
     }, [user]);
-    // ------------------------------------------------
+
+    if (loading) return <div className="dashboard-container" style={{padding: '40px', textAlign: 'center', color: '#666'}}>🚀 Đang tải dữ liệu tổng quan...</div>;
+
+    // --- CSS INLINE CHO GIAO DIỆN MỚI (Không cần sửa file .css ngoài) ---
+    const modernCardStyle: React.CSSProperties = {
+        background: 'white',
+        padding: '25px',
+        borderRadius: '16px',
+        boxShadow: '0 10px 30px -10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        border: '1px solid #f0f2f5',
+        transition: 'transform 0.2s ease',
+    };
+
+    const iconBoxStyle: React.CSSProperties = {
+        width: '60px', height: '60px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginBottom: '15px'
+    };
 
     return (
-        <div className="dashboard-home">
-            {/* Banner Chào Mừng */}
-            <div className="welcome-banner" style={{marginBottom: '32px'}}>
-                <div className="welcome-content">
-                    <h2>Xin chào, {user?.fullName || 'Quý khách'}!</h2>
-                    <p style={{opacity: 0.9, marginTop: '8px'}}>
-                        Hệ thống AURA MED sử dụng trí tuệ nhân tạo để hỗ trợ sàng lọc sớm các bệnh lý đáy mắt.
-                        Vui lòng cập nhật hồ sơ đầy đủ trước khi thực hiện chẩn đoán.
+        <div className="dashboard-container animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '40px' }}>
+            {/* 1. BANNER CHÀO MỪNG */}
+            <div className="welcome-section" style={{ marginBottom: '40px', textAlign: 'left' }}>
+                <h1 style={{ fontSize: '2.5rem', color: '#1e293b', marginBottom: '10px' }}>
+                    Xin chào, {user?.fullName || 'Bệnh nhân'}! <span style={{ display: 'inline-block', animation: 'wave 2s infinite', transformOrigin: '70% 70%' }}>👋</span>
+                </h1>
+                <p style={{ fontSize: '1.1rem', color: '#64748b' }}>Hệ thống AURA sẵn sàng hỗ trợ bạn theo dõi sức khỏe thị lực.</p>
+            </div>
+
+            {/* 2. NÚT CHẨN ĐOÁN MỚI (ĐÃ ĐƯỢC NÂNG CẤP THÀNH HERO CARD) */}
+            <div 
+                className="hero-cta-card hover-scale"
+                onClick={() => setTab('upload')}
+                style={{
+                    background: 'linear-gradient(135deg, #0061ff 0%, #60efff 100%)',
+                    borderRadius: '24px',
+                    padding: '40px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '40px',
+                    boxShadow: '0 20px 40px -15px rgba(0,97,255,0.5)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                }}
+            >
+                <div style={{ zIndex: 2 }}>
+                    <h2 style={{ fontSize: '2rem', fontWeight: '800', marginBottom: '15px', display:'flex', alignItems:'center', gap:'15px' }}>
+                        <i className="fas fa-camera-retro"></i> Chẩn Đoán Mới Ngay
+                    </h2>
+                    <p style={{ fontSize: '1.2rem', opacity: 0.95, maxWidth: '500px' }}>
+                        Sử dụng công nghệ AI tiên tiến để phân tích ảnh đáy mắt và nhận kết quả chỉ trong vài giây.
                     </p>
-                    {setTab && (
-                        <button 
-                            className="btn-save" 
-                            style={{marginTop: '20px', background: 'white', color: '#1e293b', border: 'none'}}
-                            onClick={() => setTab('upload')}
-                        >
-                            <i className="fas fa-camera" style={{marginRight: '8px'}}></i> Sàng lọc ngay
-                        </button>
-                    )}
+                    <button style={{ marginTop: '25px', padding: '12px 30px', background: 'white', color: '#0061ff', border: 'none', borderRadius: '30px', fontWeight: 'bold', fontSize: '1rem', cursor:'pointer', boxShadow: '0 5px 15px rgba(0,0,0,0.1)' }}>
+                        Bắt đầu ngay ➜
+                    </button>
                 </div>
-                <i className="fas fa-user-md welcome-decor"></i>
+                {/* Icon trang trí nền */}
+                <div style={{ position: 'absolute', right: '-50px', top: '-20px', fontSize: '180px', opacity: 0.15, transform: 'rotate(-20deg)' }}>
+                    🚀
+                </div>
             </div>
 
-            {/* --- [CODE MỚI] Hiển thị kết quả gần nhất (Dynamic Dashboard) --- */}
-            {lastExam && (
-                <div style={{marginBottom: '30px'}}>
-                    <h3 style={{marginBottom: '15px', color: 'var(--primary-700)'}}>Kết quả sàng lọc gần nhất</h3>
-                    <div className="pro-card" style={{display: 'flex', alignItems: 'center', gap: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0'}}>
-                        <div style={{width: '60px', height: '60px', background: 'white', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                            <i className="fas fa-notes-medical" style={{fontSize: '28px', color: '#16a34a'}}></i>
-                        </div>
-                        <div style={{flex: 1}}>
-                            <h4 style={{margin: '0 0 5px 0', color: '#15803d'}}>Đã hoàn thành chẩn đoán</h4>
-                            <p style={{margin: 0, fontSize: '14px', color: '#166534'}}>
-                                Thời gian: <strong>{new Date(lastExam.uploadedAt).toLocaleString('vi-VN')}</strong> <br/>
-                                Kết quả sơ bộ: <strong>{lastExam.aiDiagnosis?.diagnosis || "Đang xử lý"}</strong>
-                            </p>
-                        </div>
-                        {setTab && (
-                            <button className="btn-sm" style={{background: 'white', border: '1px solid #16a34a', color: '#16a34a'}} onClick={() => setTab('history')}>
-                                Xem chi tiết
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
-            {/* ----------------------------------------------------------- */}
-
-            {/* Grid Thông Tin Tham Khảo */}
-            <h3 style={{marginBottom: '20px', color: 'var(--primary-700)'}}>Thông tin y khoa tham khảo</h3>
-            
-            <div className="input-grid">
+            {/* 3. KHUNG THÔNG TIN TỔNG QUAN (3 CỘT) */}
+            <h3 style={{ color: '#334155', marginBottom: '20px', fontSize: '1.5rem' }}>📊 Tổng quan hồ sơ y tế</h3>
+            <div className="stats-grid-modern" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px' }}>
                 
-                {/* Card 1: Bệnh Võng mạc tiểu đường */}
-                <div className="pro-card">
-                    <div className="card-header" style={{background: '#fff7ed'}}>
-                        <h3 style={{color: '#c2410c'}}><i className="fas fa-eye"></i> Bệnh Võng mạc tiểu đường</h3>
-                    </div>
-                    <div className="form-body">
-                        <p style={{marginBottom: '15px', color: 'var(--primary-600)', fontSize: '14px', textAlign: 'justify'}}>
-                            Là biến chứng của bệnh tiểu đường gây tổn thương các mạch máu trong võng mạc. 
-                            Đây là nguyên nhân hàng đầu gây mù lòa ở người trưởng thành.
-                        </p>
-                        <div style={{background: '#f8fafc', padding: '12px', borderRadius: '8px'}}>
-                            <strong>Triệu chứng nhận biết:</strong>
-                            <ul style={{paddingLeft: '20px', marginTop: '5px', fontSize: '13px', color: 'var(--primary-500)'}}>
-                                <li>Nhìn mờ, dao động thị lực.</li>
-                                <li>Thấy đốm đen hoặc "ruồi bay" trước mắt.</li>
-                                <li>Khó phân biệt màu sắc.</li>
-                            </ul>
+                {/* Card 1: Tổng số */}
+                <div className="stat-card-modern hover-up" style={{...modernCardStyle, borderLeft: '6px solid #3b82f6'}}>
+                    <div style={{display:'flex', justifyContent:'space-between'}}>
+                        <div>
+                            <p style={{ color: '#64748b', fontSize: '1.1rem', fontWeight:'600', marginBottom:'5px' }}>Tổng lần khám</p>
+                            <h2 style={{ fontSize: '3rem', color: '#1e293b', margin: 0 }}>{stats.totalScans}</h2>
+                        </div>
+                        <div style={{...iconBoxStyle, background: '#dbeafe', color: '#3b82f6'}}>
+                            <i className="fas fa-folder-open"></i>
                         </div>
                     </div>
+                    <div style={{ marginTop: '20px', color: '#3b82f6', fontSize: '0.9rem', fontWeight:'600' }}>Tích lũy theo thời gian</div>
                 </div>
 
-                {/* Card 2: Quy trình sàng lọc */}
-                <div className="pro-card">
-                    <div className="card-header" style={{background: '#f0f9ff'}}>
-                        <h3 style={{color: '#0369a1'}}><i className="fas fa-robot"></i> Quy trình AI Sàng lọc</h3>
-                    </div>
-                    <div className="form-body">
-                        <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
-                            <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
-                                <div style={{width: '30px', height: '30px', borderRadius: '50%', background: '#0ea5e9', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'}}>1</div>
-                                <div>
-                                    <h4 style={{fontSize: '14px'}}>Tải ảnh lên</h4>
-                                    <p style={{fontSize: '12px', color: '#64748b'}}>Ảnh chụp đáy mắt chuẩn định dạng JPG/PNG.</p>
-                                </div>
-                            </div>
-                            <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
-                                <div style={{width: '30px', height: '30px', borderRadius: '50%', background: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'}}>2</div>
-                                <div>
-                                    <h4 style={{fontSize: '14px'}}>Phân tích Deep Learning</h4>
-                                    <p style={{fontSize: '12px', color: '#64748b'}}>AI quét tìm tổn thương vi mạch và xuất huyết.</p>
-                                </div>
-                            </div>
-                            <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
-                                <div style={{width: '30px', height: '30px', borderRadius: '50%', background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'}}>3</div>
-                                <div>
-                                    <h4 style={{fontSize: '14px'}}>Nhận kết quả</h4>
-                                    <p style={{fontSize: '12px', color: '#64748b'}}>Đánh giá mức độ nguy cơ (Bình thường / Cao).</p>
-                                </div>
-                            </div>
+                 {/* Card 2: Nguy cơ cao */}
+                 <div className="stat-card-modern hover-up" style={{...modernCardStyle, borderLeft: '6px solid #ef4444'}}>
+                    <div style={{display:'flex', justifyContent:'space-between'}}>
+                        <div>
+                            <p style={{ color: '#64748b', fontSize: '1.1rem', fontWeight:'600', marginBottom:'5px' }}>Ca nguy cơ cao</p>
+                            <h2 style={{ fontSize: '3rem', color: '#ef4444', margin: 0 }}>{stats.highRiskCount}</h2>
+                        </div>
+                        <div style={{...iconBoxStyle, background: '#fee2e2', color: '#ef4444'}}>
+                            <i className="fas fa-heartbeat"></i>
                         </div>
                     </div>
+                    <div style={{ marginTop: '20px', color: '#ef4444', fontSize: '0.9rem', fontWeight:'600' }}>Cần chú ý theo dõi</div>
                 </div>
 
-                {/* Card 3: Lời khuyên */}
-                <div className="pro-card full-width">
-                    <div className="card-header">
-                        <h3><i className="fas fa-heart" style={{color: '#ef4444'}}></i> Lời khuyên bác sĩ</h3>
-                    </div>
-                    <div className="form-body" style={{display: 'flex', gap: '20px', flexWrap: 'wrap'}}>
-                        <div style={{flex: 1, minWidth: '250px', background: '#f1f5f9', padding: '16px', borderRadius: '12px'}}>
-                            <h4 style={{marginBottom: '8px', color: '#334155'}}>Kiểm soát đường huyết</h4>
-                            {/* JSX safe code */}
-                            <p style={{fontSize: '13px', color: '#64748b'}}>
-                                Giữ chỉ số HbA1c ở mức an toàn (&lt; 7%) để giảm nguy cơ biến chứng võng mạc.
-                            </p>
+                 {/* Card 3: Bình thường (MỚI THÊM) */}
+                 <div className="stat-card-modern hover-up" style={{...modernCardStyle, borderLeft: '6px solid #10b981'}}>
+                    <div style={{display:'flex', justifyContent:'space-between'}}>
+                        <div>
+                            <p style={{ color: '#64748b', fontSize: '1.1rem', fontWeight:'600', marginBottom:'5px' }}>Kết quả ổn định</p>
+                            <h2 style={{ fontSize: '3rem', color: '#10b981', margin: 0 }}>{stats.normalCount}</h2>
                         </div>
-                        <div style={{flex: 1, minWidth: '250px', background: '#f1f5f9', padding: '16px', borderRadius: '12px'}}>
-                            <h4 style={{marginBottom: '8px', color: '#334155'}}>Khám mắt định kỳ</h4>
-                            <p style={{fontSize: '13px', color: '#64748b'}}>Bệnh nhân tiểu đường nên soi đáy mắt ít nhất 1 lần/năm ngay cả khi chưa mờ mắt.</p>
-                        </div>
-                        <div style={{flex: 1, minWidth: '250px', background: '#f1f5f9', padding: '16px', borderRadius: '12px'}}>
-                            <h4 style={{marginBottom: '8px', color: '#334155'}}>Lối sống lành mạnh</h4>
-                            <p style={{fontSize: '13px', color: '#64748b'}}>Không hút thuốc lá, tập thể dục 30 phút mỗi ngày và ăn nhiều rau xanh.</p>
+                        <div style={{...iconBoxStyle, background: '#d1fae5', color: '#10b981'}}>
+                            <i className="fas fa-check-circle"></i>
                         </div>
                     </div>
+                    <div style={{ marginTop: '20px', color: '#10b981', fontSize: '0.9rem', fontWeight:'600' }}>Duy trì thói quen tốt</div>
                 </div>
-
             </div>
+
+            {/* Thêm một chút style hover hiệu ứng nhẹ */}
+            <style>
+                {`
+                    .hover-up:hover { transform: translateY(-5px); box-shadow: 0 15px 35px -10px rgba(0,0,0,0.1) !important; }
+                    .hover-scale:hover { transform: scale(1.02); }
+                    @keyframes wave { 0% { transform: rotate(0deg); } 20% { transform: rotate(15deg); } 40% { transform: rotate(-10deg); } 60% { transform: rotate(5deg); } 100% { transform: rotate(0deg); } }
+                `}
+            </style>
         </div>
     );
 };
-
 export default PatientHome;

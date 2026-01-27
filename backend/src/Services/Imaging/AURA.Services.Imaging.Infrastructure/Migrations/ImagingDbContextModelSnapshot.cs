@@ -28,29 +28,34 @@ namespace AURA.Services.Imaging.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("AiAnalysisResultJson")
-                        .HasColumnType("text");
-
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("ImageUrl")
+                    b.Property<double>("ConfidenceScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HeatmapUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalImageUrl")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PredictionResult")
+                        .HasColumnType("text");
+
                     b.Property<string>("PublicId")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UploadedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

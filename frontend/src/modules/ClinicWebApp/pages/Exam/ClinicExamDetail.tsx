@@ -1,224 +1,287 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+
+// Import cấu hình chuẩn
 // @ts-ignore
-import medicalApi from '../../../../api/medicalApi'; 
+import axiosClient from '../../../../api/axiosClient';
+// Component vẽ khung đỏ AI (nếu bạn đã tạo file này theo file zip)
 // @ts-ignore
-import { useAuth } from '../../../../context/AuthContext'; 
+import ImageOverlay from './ImageOverlay'; 
 import './ClinicExamDetail.css';
 
-// Định nghĩa Interface cho dữ liệu chi tiết ca khám (bao gồm cả thông tin AI)
+// 1. Định nghĩa kiểu dữ liệu chuẩn (Bổ sung thêm các trường alias để tránh lỗi)
 interface ExamDetail {
-  patientName: string;
-  age: number;
-  gender: string;
-  examDate: string;
-  status: string;
-  imageUrl: string;
-  heatmapUrl?: string;
-  aiDiagnosis?: string;
-  aiRiskLevel?: 'High' | 'Low' | 'Medium' | string;
-  aiRiskScore?: number;
-  diagnosisResult?: string;
-  doctorNotes?: string;
-}
+    id: string;
+    patientName: string;
+    patientId: string;
+    age: number;
+    gender: string;
+    examDate: string;
+    status: 'Pending' | 'Analyzed' | 'Verified' | 'Rejected'; // Cập nhật thêm status Analyzed/Rejected
+    imageUrl: string;
+    heatmapUrl?: string;
+    
+    // Kết quả AI (Hỗ trợ cả camelCase và PascalCase)
+    aiDiagnosis?: string;
+    AiDiagnosis?: string;
+    aiRiskLevel?: string;
+    AiRiskLevel?: string;
+    aiRiskScore?: number;
+    AiRiskScore?: number;
+    bbox?: number[]; // Tọa độ vùng bệnh [x, y, w, h]
 
-interface User {
-  id: string;
-  name?: string;
-  role?: string;
+    // Kết luận bác sĩ
+    diagnosisResult?: string;
+    doctorNotes?: string;
 }
 
 const ClinicExamDetail: React.FC = () => {
-  const { id } = useParams<{ id: string }>(); // Lấy Examination ID từ URL
-  const navigate = useNavigate();
-  const { user } = useAuth() as { user: User | null }; 
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    
+    // State
+    const [exam, setExam] = useState<ExamDetail | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    
+    // Form bác sĩ nhập liệu
+    const [diagnosis, setDiagnosis] = useState('');
+    const [notes, setNotes] = useState('');
+    
+    // Điều khiển Viewer
+    const [showHeatmap, setShowHeatmap] = useState(false);
+    const [zoom, setZoom] = useState(1);
+    const reportRef = useRef<HTMLDivElement>(null); // Ref để chụp ảnh in PDF
 
-  // State dữ liệu
-  const [exam, setExam] = useState<ExamDetail | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+    // 2. Tải dữ liệu chi tiết
+    useEffect(() => {
+        const fetchDetail = async () => {
+            if (!id) return;
+            try {
+                // SỬA: Đảm bảo gọi đúng API lấy chi tiết ca khám
+                // Nếu backend của bạn endpoint là /medical-records/examinations/{id} thì giữ nguyên
+                const data: any = await axiosClient.get(`/medical-records/examinations/${id}`);
+                
+                // Log để debug xem dữ liệu trả về có đúng không
+                console.log("Exam Detail Data:", data);
 
-  // State Viewer
-  const [scale, setScale] = useState<number>(1);
-  const [showHeatmap, setShowHeatmap] = useState<boolean>(true); // Mặc định bật AI Heatmap
+                if (!data) throw new Error("No data returned");
 
-  // State Form Input
-  const [diagnosis, setDiagnosis] = useState<string>("");
-  const [notes, setNotes] = useState<string>("");
+                setExam(data);
+                
+                // Fill dữ liệu cũ nếu có
+                setDiagnosis(data.diagnosisResult || 'Bình thường');
+                setNotes(data.doctorNotes || '');
+                
+                // Tự động bật Heatmap nếu AI phát hiện rủi ro cao
+                if (data.aiRiskLevel === 'High' || data.AiRiskLevel === 'High') {
+                    setShowHeatmap(true);
+                }
 
-  // Load dữ liệu từ Backend
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        if (!id) return; // SỬA LỖI: Kiểm tra id tồn tại
-
-        // Gọi API lấy chi tiết (Bao gồm thông tin BN, Ảnh, Kết quả AI)
-        const data = await medicalApi.getExaminationDetail(id);
-        
-        setExam(data);
-        
-        if (data.diagnosisResult) {
-            setDiagnosis(data.diagnosisResult); 
-        }
-
-        if (data.doctorNotes) setNotes(data.doctorNotes);
-
-      } catch (error) {
-        console.error("Lỗi tải dữ liệu:", error);
-        alert("Không tìm thấy dữ liệu ca khám!");
-        navigate('/clinic/queue'); 
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) fetchData();
-  }, [id, navigate]);
-
-  // --- Handlers Viewer ---
-  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 3));
-  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
-  const handleResetZoom = () => setScale(1);
-
-  // --- Handlers Action ---
-  const handleSave = async () => {
-    if (!diagnosis) return alert("Vui lòng chọn kết luận bệnh!");
-
-    if (exam?.aiRiskLevel === 'High' && diagnosis === 'Bình thường') {
-        if (!window.confirm("⚠️ CẢNH BÁO AI:\nCa này có nguy cơ cao, bạn chắc chắn muốn kết luận 'Bình thường'?")) {
-            return;
-        }
-    }
-
-    try {
-        setLoading(true);
-        const payload = {
-            finalDiagnosis: diagnosis,
-            doctorNotes: notes,
-            doctorId: user?.id || "00000000-0000-0000-0000-000000000000"
+            } catch (error) {
+                console.error("Lỗi tải hồ sơ:", error);
+                toast.error("Không tìm thấy hồ sơ bệnh án hoặc lỗi kết nối.");
+                // Không navigate về dashboard ngay để user kịp đọc lỗi
+            } finally {
+                setLoading(false);
+            }
         };
 
-        if (id) {
-            await medicalApi.verifyDiagnosis(id, payload);
-            alert("✅ Đã lưu kết quả & Gửi thông báo cho bệnh nhân!");
-            navigate('/clinic/queue'); 
+        fetchDetail();
+    }, [id]);
+
+    // 3. Xử lý Lưu kết quả
+    const handleSave = async () => {
+        if (!exam) return;
+        try {
+            await axiosClient.put(`/medical-records/examinations/${exam.id}/verify`, {
+                finalDiagnosis: diagnosis,
+                doctorNotes: notes,
+                doctorId: "CURRENT_USER_ID" // Backend sẽ tự lấy từ Token, nhưng gửi kèm cho chắc
+            });
+            
+            toast.success("✅ Đã lưu chẩn đoán & Duyệt hồ sơ!");
+            setExam({ ...exam, status: 'Verified', diagnosisResult: diagnosis, doctorNotes: notes });
+        } catch (error) {
+            console.error(error);
+            toast.error("❌ Lỗi khi lưu kết quả.");
         }
+    };
 
-    } catch (error: any) {
-        console.error("Lỗi lưu:", error);
-        alert("Lỗi: " + (error.response?.data?.Error || error.message));
-    } finally {
-        setLoading(false);
-    }
-  };
-
-  const handlePrintReport = async () => {
-      try {
-          if (!id) return;
-          const report = await medicalApi.getReportData(id);
-          console.log("Report Data:", report);
-          alert(`🖨️ Đang in phiếu kết quả...\n(Traceability: ${report.technicalTraceability.systemName})`);
-      } catch (err) {
-          alert("Không thể tải dữ liệu báo cáo.");
-      }
-  };
-
-  if (loading) return <div className="loading-screen">Đang tải dữ liệu ca khám...</div>;
-  if (!exam) return null;
-
-  return (
-    <div className="exam-container">
-      {/* CỘT TRÁI: IMAGE VIEWER (CDS) */}
-      <div className="viewer-column">
-        <div className="toolbar">
-            <button onClick={handleZoomIn}><i className="fas fa-plus"></i></button>
-            <button onClick={handleResetZoom}>1:1</button>
-            <button onClick={handleZoomOut}><i className="fas fa-minus"></i></button>
-            <div className="vr mx-2"></div>
-            <div className="form-check form-switch d-inline-block">
-                <input 
-                    className="form-check-input" 
-                    type="checkbox" 
-                    checked={showHeatmap} 
-                    onChange={e => setShowHeatmap(e.target.checked)} 
-                    disabled={!exam.heatmapUrl}
-                />
-                <label className="form-check-label text-white ms-2">AI Heatmap</label>
-            </div>
-        </div>
-
-        <div className="image-wrapper" style={{ transform: `scale(${scale})` }}>
-          <img src={exam.imageUrl} alt="Original" className="main-image" />
-          {showHeatmap && exam.heatmapUrl && (
-            <img 
-                src={`http://localhost:80${exam.heatmapUrl}`} 
-                alt="Heatmap" 
-                className="heatmap-overlay" 
-                style={{ opacity: 0.6, mixBlendMode: 'multiply' }}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* CỘT PHẢI: FORM CHẨN ĐOÁN */}
-      <div className="form-column">
-        <div className="patient-card">
-            <h3>Hồ sơ: {exam.patientName}</h3>
-            <p className="mb-1"><strong>Tuổi:</strong> {exam.age} | <strong>Giới tính:</strong> {exam.gender}</p>
-            <p className="text-muted"><small>Ngày chụp: {new Date(exam.examDate).toLocaleString()}</small></p>
+    // 4. Xử lý In PDF (Tích hợp từ file .jsx cũ)
+    const handlePrintReport = async () => {
+        if (!reportRef.current || !exam) return;
+        
+        try {
+            toast.info("⏳ Đang tạo file PDF...");
+            const canvas = await html2canvas(reportRef.current, { scale: 2 });
+            const imgData = canvas.toDataURL('image/png');
             
-            <div className={`ai-result-box ${exam.aiRiskLevel === 'High' ? 'danger' : 'safe'}`}>
-                <h5>🤖 Phân tích AI:</h5>
-                <p><strong>Đánh giá:</strong> {exam.aiDiagnosis || "Chưa có kết quả"}</p>
-                <p><strong>Mức độ:</strong> {exam.aiRiskLevel} (Score: {exam.aiRiskScore}%)</p>
-            </div>
-        </div>
-
-        <div className="diagnosis-form">
-            <div className="form-group">
-                <label className="fw-bold">Kết luận chuyên môn:</label>
-                <select className="form-select" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} disabled={exam.status === 'Verified'}>
-                    <option value="">-- Chọn chẩn đoán --</option>
-                    <option value="Bình thường">Bình thường</option>
-                    <option value="Võng mạc tiểu đường (DR)">Võng mạc tiểu đường (DR)</option>
-                    <option value="Thoái hóa điểm vàng (AMD)">Thoái hóa điểm vàng (AMD)</option>
-                    <option value="Tăng nhãn áp (Glaucoma)">Tăng nhãn áp (Glaucoma)</option>
-                    <option value="Đục thủy tinh thể">Đục thủy tinh thể</option>
-                    <option value="Khác">Khác</option>
-                </select>
-            </div>
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
             
-            <div className="form-group mt-3">
-                <label className="fw-bold">Ghi chú / Y lệnh:</label>
-                <textarea 
-                    className="form-control"
-                    rows={4}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Nhập ghi chú chi tiết..."
-                    disabled={exam.status === 'Verified'}
-                ></textarea>
-            </div>
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`KetQua_Kham_${exam.patientName || 'BenhNhan'}.pdf`);
+            toast.success("✅ Tải file PDF thành công!");
+        } catch (error) {
+            console.error("Lỗi in PDF:", error);
+            toast.error("❌ Không thể tạo file PDF.");
+        }
+    };
 
-            <div className="action-buttons mt-4">
-                {exam.status !== 'Verified' ? (
-                    <button className="btn-save w-100 mb-2" onClick={handleSave} disabled={loading}>
-                        <i className="fas fa-check-circle"></i> Xác nhận & Hoàn tất
+    if (loading) return (
+        <div className="loading-container" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'white'}}>
+            <div className="spinner"></div> Đang tải hồ sơ bệnh án...
+        </div>
+    );
+
+    if (!exam) return (
+        <div className="error-container" style={{textAlign:'center', marginTop:'50px', color:'white'}}>
+            <h3>Không tìm thấy dữ liệu ca khám này.</h3>
+            <button onClick={() => navigate('/clinic/upload')} className="btn btn-secondary mt-3">Quay lại</button>
+        </div>
+    );
+
+    // Xử lý hiển thị an toàn cho các trường có thể null/undefined
+    const displayRiskScore = (exam.aiRiskScore || exam.AiRiskScore || 0) * 100;
+    const displayRiskLevel = exam.aiRiskLevel || exam.AiRiskLevel || "N/A";
+    const displayDiagnosis = exam.aiDiagnosis || exam.AiDiagnosis || "Chưa có kết quả";
+
+    return (
+        <div className="exam-detail-layout">
+            {/* Cột Trái: Viewer Ảnh & AI */}
+            <div className="viewer-section">
+                <div className="toolbar-top">
+                    <button className="btn-tool" onClick={() => navigate('/clinic/upload')}>
+                        <i className="fas fa-arrow-left"></i> Quay lại
                     </button>
-                ) : (
-                    <div className="alert alert-success text-center">
-                        <i className="fas fa-lock"></i> Hồ sơ đã được duyệt
+                    <div className="zoom-controls">
+                        <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))}>-</button>
+                        <span>{(zoom * 100).toFixed(0)}%</span>
+                        <button onClick={() => setZoom(z => Math.min(3, z + 0.1))}>+</button>
                     </div>
-                )}
-                
-                <button className="btn-print w-100" onClick={handlePrintReport}>
-                    <i className="fas fa-print"></i> In Phiếu Kết Quả
-                </button>
+                    <label className="toggle-switch">
+                        <input type="checkbox" checked={showHeatmap} onChange={e => setShowHeatmap(e.target.checked)} />
+                        <span className="slider"></span>
+                        <span className="label-text">Lớp phủ Heatmap AI</span>
+                    </label>
+                </div>
+
+                <div className="image-viewport" style={{ overflow: 'auto', height: '80vh', position: 'relative', background: '#000', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div className="image-wrapper" style={{ position: 'relative', transform: `scale(${zoom})`, transition: 'transform 0.2s' }}>
+                        {/* Ảnh gốc */}
+                        <img 
+                            src={exam.imageUrl} 
+                            alt="X-Ray" 
+                            className="main-xray" 
+                            style={{ maxWidth: '100%', maxHeight:'80vh', objectFit:'contain' }} 
+                            onError={(e) => (e.target as HTMLImageElement).src = 'https://via.placeholder.com/500?text=Image+Not+Found'}
+                        />
+                        
+                        {/* Lớp phủ Heatmap */}
+                        {showHeatmap && exam.heatmapUrl && (
+                            <img src={exam.heatmapUrl} alt="Heatmap" className="heatmap-overlay" 
+                                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0.6, pointerEvents: 'none' }} 
+                            />
+                        )}
+
+                        {/* Vẽ khung đỏ vùng bệnh (Nếu có) */}
+                        {showHeatmap && exam.bbox && <ImageOverlay bbox={exam.bbox} />}
+                    </div>
+                </div>
+            </div>
+
+            {/* Cột Phải: Form Chẩn đoán */}
+            <div className="diagnosis-form-section">
+                {/* Phần này dùng để In PDF (Ẩn một số nút khi in nếu cần CSS kỹ hơn) */}
+                <div ref={reportRef} className="report-container" style={{background: 'white', padding: '20px', borderRadius: '8px'}}>
+                    <h3 className="text-primary text-uppercase border-bottom pb-2" style={{color: '#0369a1', borderBottom: '2px solid #0369a1'}}>Phiếu Kết Quả Chẩn Đoán</h3>
+                    
+                    <div className="patient-info mb-4" style={{marginTop: '15px'}}>
+                        <p><strong>Họ tên:</strong> {exam.patientName || 'N/A'}</p>
+                        <p><strong>Tuổi/Giới tính:</strong> {exam.age || 'N/A'} / {exam.gender || 'N/A'}</p>
+                        <p><strong>Ngày chụp:</strong> {new Date(exam.examDate).toLocaleDateString('vi-VN')}</p>
+                        <p><strong>Mã hồ sơ:</strong> #{exam.id.substring(0, 8)}</p>
+                    </div>
+
+                    <div className={`ai-box p-3 rounded mb-4`} 
+                         style={{
+                             background: displayRiskLevel === 'High' ? '#fee2e2' : '#dcfce7',
+                             padding: '15px', borderRadius: '8px', marginBottom: '20px',
+                             border: displayRiskLevel === 'High' ? '1px solid #ef4444' : '1px solid #22c55e'
+                         }}>
+                        <h5 style={{color: displayRiskLevel === 'High' ? '#b91c1c' : '#15803d', margin: 0, marginBottom: '10px'}}>
+                            <i className="fas fa-robot"></i> Phân tích AI
+                        </h5>
+                        <p style={{margin: '5px 0'}}><strong>Phát hiện:</strong> {displayDiagnosis}</p>
+                        <p style={{margin: '5px 0'}}><strong>Nguy cơ:</strong> <span style={{fontWeight:'bold'}}>{displayRiskLevel}</span></p>
+                        <p style={{margin: '5px 0'}}><strong>Độ tin cậy:</strong> {displayRiskScore.toFixed(1)}%</p>
+                    </div>
+
+                    <div className="doctor-input-section">
+                        <div className="mb-3" style={{marginBottom: '15px'}}>
+                            <label className="form-label fw-bold" style={{display:'block', marginBottom:'5px'}}>Kết luận chuyên môn:</label>
+                            <select 
+                                className="form-select" 
+                                value={diagnosis} 
+                                onChange={e => setDiagnosis(e.target.value)}
+                                disabled={exam.status === 'Verified'}
+                                style={{width:'100%', padding:'8px', borderRadius:'4px', border:'1px solid #ccc'}}
+                            >
+                                <option value="Bình thường">Bình thường</option>
+                                <option value="Viêm giác mạc">Viêm giác mạc</option>
+                                <option value="Loét giác mạc">Loét giác mạc</option>
+                                <option value="Đục thủy tinh thể">Đục thủy tinh thể</option>
+                                <option value="Võng mạc đái tháo đường">Võng mạc đái tháo đường</option>
+                                <option value="Thoái hóa hoàng điểm">Thoái hóa hoàng điểm</option>
+                                <option value="Khác">Khác (Ghi chú thêm)</option>
+                            </select>
+                        </div>
+
+                        <div className="mb-3" style={{marginBottom: '15px'}}>
+                            <label className="form-label fw-bold" style={{display:'block', marginBottom:'5px'}}>Ghi chú / Y lệnh:</label>
+                            <textarea 
+                                className="form-control" 
+                                rows={5}
+                                value={notes}
+                                onChange={e => setNotes(e.target.value)}
+                                disabled={exam.status === 'Verified'}
+                                placeholder="Nhập phác đồ điều trị hoặc ghi chú..."
+                                style={{width:'100%', padding:'8px', borderRadius:'4px', border:'1px solid #ccc'}}
+                            ></textarea>
+                        </div>
+                    </div>
+
+                    {exam.status === 'Verified' && (
+                        <div className="mt-4 text-end" style={{textAlign: 'right', marginTop: '30px'}}>
+                            <p><strong>Bác sĩ chuyên khoa</strong></p>
+                            <p className="text-muted fst-italic" style={{color:'#888', fontStyle:'italic'}}>(Đã ký xác nhận trên hệ thống)</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Các nút hành động (Không in ra PDF vì nằm ngoài ref) */}
+                <div className="action-buttons mt-3 p-3 bg-light rounded" style={{marginTop: '20px'}}>
+                    {exam.status !== 'Verified' ? (
+                        <button className="btn btn-primary w-100 mb-2" onClick={handleSave} style={{width:'100%', padding:'10px', background:'#0ea5e9', color:'white', border:'none', borderRadius:'4px', marginBottom:'10px', cursor:'pointer'}}>
+                            <i className="fas fa-check"></i> Xác nhận & Lưu
+                        </button>
+                    ) : (
+                        <button className="btn btn-success w-100 mb-2" disabled style={{width:'100%', padding:'10px', background:'#22c55e', color:'white', border:'none', borderRadius:'4px', marginBottom:'10px', opacity: 0.8, cursor:'not-allowed'}}>
+                            <i className="fas fa-lock"></i> Hồ sơ đã khóa
+                        </button>
+                    )}
+                    
+                    <button className="btn btn-outline-dark w-100" onClick={handlePrintReport} style={{width:'100%', padding:'10px', background:'transparent', color:'#333', border:'1px solid #333', borderRadius:'4px', cursor:'pointer'}}>
+                        <i className="fas fa-print"></i> Xuất PDF
+                    </button>
+                </div>
             </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ClinicExamDetail;

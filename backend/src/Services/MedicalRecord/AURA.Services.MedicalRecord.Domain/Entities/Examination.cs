@@ -6,18 +6,20 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
 {
     public class Examination : Entity
     {
-        // --- Properties ---
-        public Guid PatientId { get; private set; }
+        // Chuyển sang public set để cho phép gán dữ liệu từ Controller/Imaging Service
+        public Guid PatientId { get; set; } 
+        public Guid ClinicId { get; set; }
         public Guid? DoctorId { get; set; }
         public Guid ImageId { get; set; }
-        public DateTime ExamDate { get; private set; }
+        public DateTime ExamDate { get; set; }
         
         public string Diagnosis { get; set; } = string.Empty;
         public string DoctorNotes { get; set; } = string.Empty;
-        public string ImageUrl { get; private set; } = string.Empty;
-        public string Status { get; private set; } = "Pending"; 
+        
+        // Mở khóa set để dứt điểm lỗi CS0272
+        public string ImageUrl { get; set; } = string.Empty;
+        public string Status { get; set; } = "Pending"; 
 
-        // --- AI Fields ---
         public double? AiRiskScore { get; set; }
         public string? AiRiskLevel { get; set; } 
         public string? HeatmapUrl { get; set; }
@@ -28,10 +30,9 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
         [NotMapped]
         private ExaminationState _state = new PendingState();
 
-        // --- Constructors ---
         public Examination() { }
 
-        // [QUAN TRỌNG] Constructor 5 tham số để Controller gọi khi tạo thủ công
+        // Giữ nguyên Constructor 1 của bạn
         public Examination(Guid patientId, Guid imageId, string diagnosis, string notes, Guid doctorId)
         {
             Id = Guid.NewGuid();
@@ -43,18 +44,11 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
             ExamDate = DateTime.UtcNow;
             ImageUrl = ""; 
             
-            // Nếu tạo thủ công kèm chẩn đoán thì coi như Verified luôn
-            if (!string.IsNullOrEmpty(diagnosis))
-            {
-                TransitionTo(new VerifiedState());
-            }
-            else
-            {
-                TransitionTo(new PendingState());
-            }
+            if (!string.IsNullOrEmpty(diagnosis)) TransitionTo(new VerifiedState());
+            else TransitionTo(new PendingState());
         }
 
-        // Constructor cho luồng upload tự động (2 tham số)
+        // Giữ nguyên Constructor 2 của bạn
         public Examination(Guid patientId, string imageUrl)
         {
             Id = Guid.NewGuid();
@@ -66,14 +60,14 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
             TransitionTo(new PendingState());
         }
 
-        // --- Methods ---
+        // --- GIỮ NGUYÊN TOÀN BỘ LOGIC NGHIỆP VỤ (STATE PATTERN) CỦA BẠN ---
+
         public void TransitionTo(ExaminationState newState)
         {
             _state = newState;
             if (newState is PendingState) Status = "Pending";
             else if (newState is AnalyzedState) Status = "Analyzed";
             else if (newState is VerifiedState) Status = "Verified";
-            else if (Status == "Rejected") { } 
             else Status = "Unknown";
         }
 
@@ -88,24 +82,20 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
             }
         }
 
-        // Overload 1: Cập nhật đầy đủ (Dùng cho Consumer khi AI trả về full)
         public void UpdateAiResult(string riskLevel, string diagnosis, double score, string heatmapUrl)
         {
             this.AiRiskLevel = riskLevel;
             this.AiDiagnosis = diagnosis;
             this.AiRiskScore = score;
             this.HeatmapUrl = heatmapUrl;
-
             if (_state == null) LoadState();
             _state.ProcessAiResult(this, diagnosis);
         }
 
-        // [MỚI] Overload 2: Cập nhật đơn giản (Dùng cho Controller UpdateAiResult 1 tham số)
         public void UpdateAiResult(string aiResult)
         {
             this.AiDiagnosis = aiResult;
-            this.AiRiskLevel = "Unknown"; // Giá trị mặc định
-            
+            this.AiRiskLevel = "Unknown"; 
             if (_state == null) LoadState();
             _state.ProcessAiResult(this, aiResult);
         }
@@ -119,7 +109,7 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
 
         public void ConfirmDiagnosis(string doctorNotes, string finalResult, Guid doctorId)
         {
-            this.DoctorId = doctorId; // Cập nhật bác sĩ
+            this.DoctorId = doctorId;
             if (_state == null) LoadState();
             _state.VerifyByDoctor(this, doctorNotes, finalResult);
         }

@@ -1,49 +1,48 @@
-using AURA.Shared.Kernel.Primitives;
-using System; // Đảm bảo có namespace này cho DateTime và Guid
+using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AURA.Services.Imaging.Domain.Entities
 {
-    public class ImageMetadata : AggregateRoot
+    // FIX CS0103: Khai báo Enum để Controller có thể sử dụng
+    public enum ImageStatus { Pending = 0, Analyzed = 1, Rejected = 2, Failed = 3 }
+
+    public class ImageMetadata
     {
-        public Guid PatientId { get; private set; }
+        [Key]
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        public Guid PatientId { get; set; }
+        public Guid ClinicId { get; set; }
         
-        // [TV5] Trường này xác định ảnh thuộc Phòng khám nào
-        public Guid ClinicId { get; private set; } 
+        public string OriginalImageUrl { get; set; } = string.Empty;
+        public string PublicId { get; set; } = string.Empty; // Cloudinary ID
 
-        public string ImageUrl { get; private set; }
-        public string PublicId { get; private set; }
-        public DateTime UploadedAt { get; private set; }
-
-        // --- [MỚI] Các trường hỗ trợ AI và Quy trình xử lý ---
-        // Trạng thái: Pending (Chờ) -> Analyzed (Đã xong) -> Verified (Bác sĩ duyệt)
-        public string Status { get; private set; } = "Pending"; 
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         
-        // Lưu kết quả JSON thô từ AI trả về (nullable vì lúc mới upload chưa có)
-        public string? AiAnalysisResultJson { get; private set; }
+        // Cập nhật kiểu dữ liệu thành ImageStatus Enum
+        public ImageStatus Status { get; set; } = ImageStatus.Pending; 
 
-        // Constructor
-        public ImageMetadata(Guid patientId, Guid clinicId, string imageUrl, string publicId)
+        // Kết quả từ AI trả về
+        public string? PredictionResult { get; set; } // Ví dụ: "DR_Moderate"
+        
+        // FIX CS1061: Thêm thuộc tính RiskLevel còn thiếu
+        public string RiskLevel { get; set; } = string.Empty; 
+        
+        public double ConfidenceScore { get; set; } = 0;
+        public string? HeatmapUrl { get; set; } // Link ảnh bản đồ nhiệt
+
+        public ImageMetadata() { }
+
+        public ImageMetadata(Guid patientId, Guid clinicId, string url, string publicId)
         {
             Id = Guid.NewGuid();
             PatientId = patientId;
             ClinicId = clinicId;
-            ImageUrl = imageUrl;
+            OriginalImageUrl = url;
             PublicId = publicId;
-            UploadedAt = DateTime.UtcNow;
-            Status = "Pending"; // Mặc định khi mới upload
-        }
-
-        // Constructor rỗng cho EF Core
-        protected ImageMetadata() { }
-
-        // --- [MỚI] Phương thức cập nhật kết quả AI (Behavior) ---
-        public void UpdateAiResult(string jsonResult)
-        {
-            if (string.IsNullOrWhiteSpace(jsonResult))
-                throw new ArgumentException("Kết quả AI không được để trống");
-
-            AiAnalysisResultJson = jsonResult;
-            Status = "Analyzed"; // Chuyển trạng thái sang đã phân tích
+            CreatedAt = DateTime.UtcNow;
+            Status = ImageStatus.Pending;
         }
     }
 }

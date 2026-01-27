@@ -1,19 +1,20 @@
-    # Chặn các thư mục cực nặng
-    **/node_modules/
-    **/.git/
-    **/.vscode/
+# Bỏ qua các thư mục biên dịch của .NET
+**/bin/
+**/obj/
 
-    # Chặn file build của .NET (Imaging, Identity...)
-    **/bin/
-    **/obj/
+# Bỏ qua thư mục git
+.git/
+.gitignore
+.vs/
+.vscode/
 
-    # Chặn dữ liệu AI và Ảnh (Thủ phạm gây tốn dung lượng)
-    **/static/results/
-    **/uploads/
-    **/datasets/
-    **/*.weights
-    **/*.h5
+# Bỏ qua node_modules (nếu vô tình có trong backend)
+**/node_modules/
 
-    # Các file tạm
-    *.log
-    .env
+# Bỏ qua các file ảnh/video nặng không cần thiết cho code backend
+**/*.mp4
+**/*.mov
+
+# Bỏ qua folder frontend (Identity Service không cần frontend)
+frontend/
+HTGIACMAC/frontend/

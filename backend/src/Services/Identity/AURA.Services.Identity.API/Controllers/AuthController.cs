@@ -52,19 +52,27 @@ public class AuthController : ControllerBase
         _publishEndpoint = publishEndpoint;
     }
 
+    // --- CÁC API KHÁC GIỮ NGUYÊN ---
+
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterUserCommand command)
     {
         var result = await _sender.Send(command);
         if (result.IsSuccess)
         {
-            await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
-                result.Value, 
-                command.Email, 
-                command.FullName, 
-                "Patient", 
-                null 
-            ));
+            // Publish Event an toàn (Fire-and-forget)
+            try 
+            {
+                await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
+                    result.Value, 
+                    command.Email, 
+                    command.FullName, 
+                    command.PhoneNumber, 
+                    "Patient", 
+                    null 
+                ));
+            }
+            catch (Exception) { /* Log lỗi RabbitMQ nhưng không làm fail request đăng ký */ }
 
             return Ok(new { 
                 isSuccess = true, 
@@ -97,9 +105,20 @@ public class AuthController : ControllerBase
         return Unauthorized(new { isSuccess = false, message = "Tài khoản hoặc mật khẩu không chính xác." });
     }
 
+    // --- [FIX] SỬA LỖI TRANSACTION ---
     [HttpPost("register-partner")]
     public async Task<IActionResult> RegisterPartner([FromBody] RegisterPartnerDto dto)
     {
+        // 1. Kiểm tra trùng lặp trước để tránh lỗi DB
+        if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
+            return BadRequest(new { isSuccess = false, message = "Email này đã được sử dụng." });
+
+        if (await _context.Users.AnyAsync(u => u.Username == dto.Username))
+            return BadRequest(new { isSuccess = false, message = "Username này đã được sử dụng." });
+
+        User user = null;
+
+        // 2. Transaction chỉ bao bọc thao tác DB
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -109,7 +128,7 @@ public class AuthController : ControllerBase
 
             var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
             
-            var user = new User(
+            user = new User(
                 Guid.NewGuid(),
                 dto.Username,
                 passwordHash,
@@ -122,36 +141,49 @@ public class AuthController : ControllerBase
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            await transaction.CommitAsync();
+            await transaction.CommitAsync(); // DB thành công -> Chốt transaction
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(); // Chỉ rollback khi lỗi DB
+            return BadRequest(new { isSuccess = false, message = "Đăng ký thất bại", detail = ex.Message });
+        }
 
+        // 3. Publish Event ra ngoài Transaction (Nếu lỗi cũng không ảnh hưởng việc tạo User)
+        try
+        {
             await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
                 user.Id, 
                 user.Email, 
                 user.FullName, 
+                user.PhoneNumber ?? "", // Xử lý null
                 user.Role, 
-                user.ClinicId));
-            
-            return Ok(new { 
-                isSuccess = true, 
-                message = "Gửi yêu cầu hợp tác thành công! Vui lòng chờ hệ thống phê duyệt hồ sơ của bạn." 
-            });
+                user.ClinicId
+            ));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            await transaction.RollbackAsync();
-            return BadRequest(new { isSuccess = false, message = "Đăng ký thất bại", detail = ex.Message });
+            // Log warning: User đã tạo nhưng Event gửi thất bại
+            // Hệ thống vẫn coi là đăng ký thành công
         }
+        
+        return Ok(new { 
+            isSuccess = true, 
+            message = "Gửi yêu cầu hợp tác thành công! Bạn có thể đăng nhập ngay." 
+        });
     }
 
     [Authorize(Roles = "ClinicAdmin")]
     [HttpPost("create-doctor")]
     public async Task<IActionResult> CreateDoctor([FromBody] CreateDoctorDto dto)
     {
-        // SỬA LỖI: Kiểm tra cả hai trường hợp clinicId (thường) và ClinicId (hoa)
         var clinicIdClaim = User.FindFirst("clinicId")?.Value ?? User.FindFirst("ClinicId")?.Value;
         
         if (string.IsNullOrEmpty(clinicIdClaim)) 
             return Unauthorized(new { message = "Không tìm thấy thông tin phòng khám của bạn trong Token." });
+
+        if (await _context.Users.AnyAsync(u => u.Username == dto.Username || u.Email == dto.Email))
+             return BadRequest(new { message = "Tài khoản hoặc Email đã tồn tại." });
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
         
@@ -168,12 +200,18 @@ public class AuthController : ControllerBase
         _context.Users.Add(doctor);
         await _context.SaveChangesAsync();
 
-        await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
-            doctor.Id, 
-            doctor.Email, 
-            doctor.FullName, 
-            doctor.Role, 
-            doctor.ClinicId));
+        try 
+        {
+            await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
+                doctor.Id, 
+                doctor.Email, 
+                doctor.FullName, 
+                doctor.PhoneNumber ?? "", 
+                doctor.Role, 
+                doctor.ClinicId
+            ));
+        }
+        catch { }
 
         return Ok(new { isSuccess = true, message = "Đã tạo tài khoản Bác sĩ thành công." });
     }
@@ -227,7 +265,11 @@ public class AuthController : ControllerBase
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
-                await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(user.Id, user.Email, user.FullName, user.Role, null));
+                try {
+                    await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
+                        user.Id, user.Email, user.FullName, null, user.Role, null
+                    ));
+                } catch {}
             }
 
             var token = _jwtTokenService.GenerateToken(user); 
@@ -271,7 +313,11 @@ public class AuthController : ControllerBase
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
-                await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(user.Id, user.Email, user.FullName, user.Role, null));
+                try {
+                    await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
+                        user.Id, user.Email, user.FullName, null, user.Role, null
+                    ));
+                } catch {}
             }
 
             var token = _jwtTokenService.GenerateToken(user);

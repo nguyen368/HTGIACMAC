@@ -4,14 +4,13 @@ import { PatientProfile as IPatientProfile, Clinic } from '../../../../types/med
 import './PatientProfile.css';
 
 const PatientProfile: React.FC = () => {
-    // 1. Khai báo state cho hồ sơ (Sử dụng Interface IPatientProfile để kiểm soát kiểu dữ liệu)
     const [profile, setProfile] = useState<IPatientProfile>({
         fullName: '',
         dateOfBirth: '',
         gender: '',
         phoneNumber: '',
         address: '',
-        clinicId: '', // Liên kết với phòng khám
+        clinicId: '',
         medicalHistory: {
             hasDiabetes: false,
             hasHypertension: false,
@@ -20,25 +19,22 @@ const PatientProfile: React.FC = () => {
         }
     });
 
-    // State lưu danh sách phòng khám từ Identity Service
     const [clinics, setClinics] = useState<Clinic[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [message, setMessage] = useState<{ type: string; text: string }>({ type: '', text: '' });
 
-    // 2. Tải dữ liệu ban đầu khi mở trang
     useEffect(() => {
         const loadData = async () => {
             try {
                 setLoading(true);
-                
-                // Bước A: Tải danh sách phòng khám để người dùng chọn
                 const clinicData = await medicalApi.getClinics();
                 setClinics(clinicData || []);
 
-                // Bước B: Tải hồ sơ hiện tại của bệnh nhân
                 const data = await medicalApi.getPatientProfile();
                 if (data) {
-                    const formattedDate = data.dateOfBirth ? data.dateOfBirth.slice(0, 10) : '';
+                    // Xử lý ngày tháng: Cắt bỏ phần giờ phút để hiện đúng trên input type="date"
+                    const formattedDate = data.dateOfBirth ? data.dateOfBirth.split('T')[0] : '';
+                    
                     setProfile({
                         fullName: data.fullName || '',
                         dateOfBirth: formattedDate,
@@ -46,7 +42,6 @@ const PatientProfile: React.FC = () => {
                         phoneNumber: data.phoneNumber || '',
                         address: data.address || '',
                         clinicId: data.clinicId || '',
-                        // Cập nhật thêm phần tiền sử bệnh lý nếu đã có trong DB
                         medicalHistory: data.medicalHistory || {
                             hasDiabetes: false,
                             hasHypertension: false,
@@ -56,28 +51,21 @@ const PatientProfile: React.FC = () => {
                     });
                 }
             } catch (error: any) {
-                // Nếu lỗi 404 (Chưa có hồ sơ) thì bỏ qua, người dùng sẽ tạo mới
                 if (error.response && error.response.status === 404) {
-                    console.log("Thông báo: Bạn chưa có hồ sơ y tế. Vui lòng điền thông tin để tạo mới.");
+                    console.log("Chưa có hồ sơ, tạo mới.");
                 } else {
-                    setMessage({ 
-                        type: 'error', 
-                        text: 'Lỗi kết nối hệ thống. Vui lòng kiểm tra lại Gateway và các dịch vụ.' 
-                    });
+                    setMessage({ type: 'error', text: 'Lỗi kết nối. Vui lòng thử lại sau.' });
                 }
             } finally {
                 setLoading(false);
             }
         };
-
         loadData();
     }, []);
 
-    // 3. Xử lý lưu/cập nhật hồ sơ
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         
-        // Kiểm tra logic: Phải chọn phòng khám mới cho lưu
         if (!profile.clinicId) {
             setMessage({ type: 'error', text: 'Vui lòng chọn phòng khám đăng ký.' });
             return;
@@ -86,23 +74,47 @@ const PatientProfile: React.FC = () => {
         setLoading(true);
         setMessage({ type: '', text: '' });
 
-        try {
-            // Gọi API UpdateProfile (Gửi toàn bộ object bao gồm medicalHistory)
-            await medicalApi.updateProfile(profile);
+        // [FIX QUAN TRỌNG] Tạo payload sạch sẽ trước khi gửi
+        const payload = {
+            ...profile,
+            // Đảm bảo ngày sinh đúng chuẩn YYYY-MM-DD
+            dateOfBirth: profile.dateOfBirth, 
             
-            setMessage({ type: 'success', text: 'Hồ sơ sức khỏe đã được cập nhật thành công!' });
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            medicalHistory: {
+                // 1. Logic ép kiểu an toàn
+                hasDiabetes: Boolean(profile.medicalHistory?.hasDiabetes),
+                hasHypertension: Boolean(profile.medicalHistory?.hasHypertension),
+                
+                // 2. Logic nghiệp vụ: Nếu không bị tiểu đường thì số năm BẮT BUỘC phải là 0
+                // (Tránh trường hợp người dùng nhập số năm rồi bỏ tick tiểu đường)
+                yearsOfDiabetes: profile.medicalHistory?.hasDiabetes 
+                    ? Number(profile.medicalHistory.yearsOfDiabetes) 
+                    : 0, 
+                
+                // 3. Đảm bảo string hợp lệ
+                smokingStatus: profile.medicalHistory?.smokingStatus || 'never'
+            }
+        };
 
-            // Tự động ẩn thông báo sau 5 giây
+        console.log("DATA GỬI ĐI (Đã làm sạch):", payload); // [DEBUG] Xem trong F12 Console
+
+        try {
+            await medicalApi.updateProfile(payload);
+            setMessage({ type: 'success', text: '✅ Hồ sơ sức khỏe đã được cập nhật thành công!' });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             setTimeout(() => setMessage({ type: '', text: '' }), 5000);
         } catch (error: any) {
+            console.error("LỖI API:", error.response); 
             const errorResponse = error.response?.data;
             let errorMsg = 'Không thể lưu hồ sơ. Vui lòng kiểm tra lại dữ liệu.';
 
             if (errorResponse?.errors) {
+                // Lấy thông báo lỗi chi tiết từ Backend
                 errorMsg = Array.isArray(errorResponse.errors) 
                     ? errorResponse.errors[0] 
-                    : Object.values(errorResponse.errors)[0];
+                    : Object.values(errorResponse.errors)[0] as string;
+            } else if (errorResponse?.detail) {
+                errorMsg = errorResponse.detail;
             }
             setMessage({ type: 'error', text: errorMsg });
         } finally {
@@ -110,14 +122,8 @@ const PatientProfile: React.FC = () => {
         }
     };
 
-    // Giao diện khi đang tải dữ liệu
     if (loading && !profile.fullName && clinics.length === 0) {
-        return (
-            <div className="profile-loading-box">
-                <div className="loader"></div>
-                <p>Đang đồng bộ dữ liệu với hệ thống AURA...</p>
-            </div>
-        );
+        return <div className="profile-loading-box"><div className="loader"></div><p>Đang tải dữ liệu...</p></div>;
     }
 
     return (
@@ -136,38 +142,22 @@ const PatientProfile: React.FC = () => {
 
             <form onSubmit={handleSubmit} className="profile-form">
                 <div className="form-grid">
-                    {/* PHẦN 1: THÔNG TIN HÀNH CHÍNH */}
                     <div className="form-section">
                         <h4 className="section-title"><i className="fas fa-id-card"></i> Thông tin cơ bản</h4>
                         
                         <div className="form-group">
                             <label>Họ và tên</label>
-                            <input 
-                                type="text" 
-                                placeholder="Nhập họ và tên đầy đủ"
-                                value={profile.fullName} 
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => setProfile({...profile, fullName: e.target.value})} 
-                                required 
-                            />
+                            <input type="text" value={profile.fullName} onChange={(e) => setProfile({...profile, fullName: e.target.value})} required />
                         </div>
 
                         <div className="form-row">
                             <div className="form-group">
                                 <label>Ngày sinh</label>
-                                <input 
-                                    type="date" 
-                                    value={profile.dateOfBirth} 
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => setProfile({...profile, dateOfBirth: e.target.value})} 
-                                    required 
-                                />
+                                <input type="date" value={profile.dateOfBirth} onChange={(e) => setProfile({...profile, dateOfBirth: e.target.value})} required />
                             </div>
                             <div className="form-group">
                                 <label>Giới tính</label>
-                                <select 
-                                    value={profile.gender} 
-                                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setProfile({...profile, gender: e.target.value})} 
-                                    required
-                                >
+                                <select value={profile.gender} onChange={(e) => setProfile({...profile, gender: e.target.value})} required>
                                     <option value="">-- Chọn --</option>
                                     <option value="Male">Nam</option>
                                     <option value="Female">Nữ</option>
@@ -178,33 +168,20 @@ const PatientProfile: React.FC = () => {
 
                         <div className="form-group">
                             <label>Số điện thoại</label>
-                            <input 
-                                type="tel" 
-                                value={profile.phoneNumber} 
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => setProfile({...profile, phoneNumber: e.target.value})} 
-                                required 
-                            />
+                            <input type="tel" value={profile.phoneNumber} onChange={(e) => setProfile({...profile, phoneNumber: e.target.value})} required />
                         </div>
 
                         <div className="form-group">
                             <label>Phòng khám theo dõi</label>
-                            <select 
-                                value={profile.clinicId} 
-                                onChange={(e: ChangeEvent<HTMLSelectElement>) => setProfile({...profile, clinicId: e.target.value})} 
-                                required
-                                className="clinic-select-highlight"
-                            >
-                                <option value="">-- Chọn phòng khám để đăng ký khám --</option>
+                            <select value={profile.clinicId} onChange={(e) => setProfile({...profile, clinicId: e.target.value})} required className="clinic-select-highlight">
+                                <option value="">-- Chọn phòng khám --</option>
                                 {clinics.map((clinic) => (
-                                    <option key={clinic.id} value={clinic.id}>
-                                        🏥 {clinic.name} - {clinic.address}
-                                    </option>
+                                    <option key={clinic.id} value={clinic.id}>🏥 {clinic.name}</option>
                                 ))}
                             </select>
                         </div>
                     </div>
 
-                    {/* PHẦN 2: TIỀN SỬ BỆNH LÝ (BỔ SUNG MỚI CHO AI) */}
                     <div className="form-section highlight-section">
                         <h4 className="section-title"><i className="fas fa-stethoscope"></i> Tiền sử lâm sàng</h4>
                         
@@ -214,7 +191,7 @@ const PatientProfile: React.FC = () => {
                                     type="checkbox" 
                                     id="diabetes"
                                     checked={profile.medicalHistory?.hasDiabetes}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => setProfile({
+                                    onChange={(e) => setProfile({
                                         ...profile, 
                                         medicalHistory: {...profile.medicalHistory!, hasDiabetes: e.target.checked}
                                     })} 
@@ -228,8 +205,9 @@ const PatientProfile: React.FC = () => {
                                     <input 
                                         type="number" 
                                         min="0"
+                                        placeholder="Nhập số năm..."
                                         value={profile.medicalHistory.yearsOfDiabetes}
-                                        onChange={(e: ChangeEvent<HTMLInputElement>) => setProfile({
+                                        onChange={(e) => setProfile({
                                             ...profile, 
                                             medicalHistory: {...profile.medicalHistory!, yearsOfDiabetes: parseInt(e.target.value) || 0}
                                         })}
@@ -242,7 +220,7 @@ const PatientProfile: React.FC = () => {
                                     type="checkbox" 
                                     id="hypertension"
                                     checked={profile.medicalHistory?.hasHypertension}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => setProfile({
+                                    onChange={(e) => setProfile({
                                         ...profile, 
                                         medicalHistory: {...profile.medicalHistory!, hasHypertension: e.target.checked}
                                     })} 
@@ -255,7 +233,7 @@ const PatientProfile: React.FC = () => {
                             <label>Thói quen hút thuốc</label>
                             <select 
                                 value={profile.medicalHistory?.smokingStatus}
-                                onChange={(e: ChangeEvent<HTMLSelectElement>) => setProfile({
+                                onChange={(e) => setProfile({
                                     ...profile, 
                                     medicalHistory: {...profile.medicalHistory!, smokingStatus: e.target.value as any}
                                 })}
@@ -268,12 +246,7 @@ const PatientProfile: React.FC = () => {
 
                         <div className="form-group mt-3">
                             <label>Địa chỉ thường trú</label>
-                            <textarea 
-                                rows={2}
-                                value={profile.address} 
-                                onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setProfile({...profile, address: e.target.value})} 
-                                required 
-                            />
+                            <textarea rows={2} value={profile.address} onChange={(e) => setProfile({...profile, address: e.target.value})} required />
                         </div>
                     </div>
                 </div>

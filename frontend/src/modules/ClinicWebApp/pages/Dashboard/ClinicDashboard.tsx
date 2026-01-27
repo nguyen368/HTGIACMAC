@@ -1,113 +1,144 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+// @ts-ignore
 import medicalApi from "../../../../api/medicalApi";
-import Sidebar from "../../../../components/Sidebar/Sidebar"; // Cập nhật đường dẫn chuẩn
-import { ClinicStats, Examination } from "../../../../types/medical";
+import { useAuth } from "../../../../context/AuthContext";
+import { useSignalR } from "../../../../context/SignalRContext"; 
 import "./ClinicDashboard.css";
 
 const ClinicDashboard: React.FC = () => {
     const navigate = useNavigate();
-    const [stats, setStats] = useState<ClinicStats | null>(null);
+    const { user } = useAuth(); // LẤY THÔNG TIN USER TỪ TOKEN
+    const { lastNotification } = useSignalR(); 
+    const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
-    const CURRENT_CLINIC_ID = "d2b51336-6c1c-426d-881e-45051666617a";
+    const fetchDashboardData = useCallback(async () => {
+        // TỰ ĐỘNG: Lấy clinicId của user đang đăng nhập
+        const currentUser = user as any;
+        const clinicId = currentUser?.clinicId || currentUser?.ClinicId || "";
 
+        if (!clinicId) {
+            console.warn("Không tìm thấy ClinicId. Vui lòng kiểm tra lại cấu hình tài khoản.");
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const data: any = await medicalApi.getStats(clinicId);
+            
+            // Mapping dữ liệu linh hoạt (PascalCase từ C# và camelCase từ JSON)
+            const summary = data?.summary || data?.Summary || {};
+            const recent = data?.recentActivity || data?.RecentActivity || [];
+
+            setStats({
+                totalPatients: summary.totalPatients ?? summary.TotalPatients ?? 0,
+                totalScans: summary.totalScans ?? summary.TotalScans ?? 0,
+                pendingExams: summary.pendingExams ?? summary.PendingExams ?? 0,
+                highRiskCases: summary.highRiskCases ?? summary.HighRiskCases ?? 0,
+                recentActivity: recent
+            });
+        } catch (error) { 
+            console.error("Lỗi Dashboard:", error); 
+        } finally { 
+            setLoading(false); 
+        }
+    }, [user]);
+
+    // Luồng khởi tạo: Khi user có dữ liệu thì fetch data ngay
+    useEffect(() => { 
+        if (user) fetchDashboardData(); 
+    }, [user, fetchDashboardData]);
+
+    // Luồng Real-time: Khi AI xử lý xong hoặc có ca mới, Dashboard tự load lại (Không cần F5)
     useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                setLoading(true);
-                const data = await medicalApi.getStats(CURRENT_CLINIC_ID);
-                setStats(data);
-            } catch (error) {
-                console.error("Lỗi tải dashboard:", error);
-            } finally {
-                setLoading(false);
+        if (lastNotification) {
+            const notifyType = lastNotification.type || lastNotification.Type;
+            if (['NEW_EXAM', 'AI_RESULT', 'AiFinished'].includes(notifyType)) {
+                console.log("--> [SignalR] Dashboard đang cập nhật dữ liệu mới...");
+                fetchDashboardData(); 
             }
-        };
-        fetchDashboardData();
-    }, [CURRENT_CLINIC_ID]);
+        }
+    }, [lastNotification, fetchDashboardData]);
 
-    const formatDate = (dateString: string) => {
-        if (!dateString) return "---";
-        return new Date(dateString).toLocaleDateString('vi-VN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-        });
-    };
+    if (loading) return (
+        <div className="dashboard-loading-container">
+            <div className="spinner"></div>
+            <p>Đang kết nối dữ liệu AURA...</p>
+        </div>
+    );
 
     return (
-        <div className="clinic-dashboard-layout" style={{ display: 'flex' }}>
-            <Sidebar />
-            <main className="main-content-wrapper" style={{ marginLeft: '250px', width: 'calc(100% - 250px)', minHeight: '100vh', background: '#f4f7f9' }}>
-                <div className="dashboard-header-bar" style={{ background: '#fff', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                    <div className="logo-text">
-                        <h2 style={{ margin: 0, color: '#2c3e50', fontSize: '20px' }}>🏥 AURA CLINIC CENTER</h2>
+        <div className="dashboard-wrapper-inner">
+            <h2 className="page-title"><i className="fas fa-chart-line"></i> Dashboard Hệ Thống</h2>
+            
+            <div className="dashboard-content">
+                {/* 1. Khu vực Thống kê */}
+                <div className="stats-grid-dashboard">
+                    <div className="stat-card-d blue">
+                        <h3>Bệnh nhân</h3>
+                        <div className="value">{stats?.totalPatients}</div>
                     </div>
-                    <div className="user-info-group" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <span className="badge-status success">● Hệ thống Online</span>
-                        <div style={{ background: '#3498db', color: 'white', width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                            AD
-                        </div>
+                    <div className="stat-card-d green">
+                        <h3>Lượt chụp</h3>
+                        <div className="value">{stats?.totalScans}</div>
+                    </div>
+                    <div className="stat-card-d yellow">
+                        <h3>Chờ duyệt</h3>
+                        <div className="value">{stats?.pendingExams}</div>
+                    </div>
+                    <div className="stat-card-d red">
+                        <h3>Nguy cơ cao</h3>
+                        <div className="value">{stats?.highRiskCases}</div>
                     </div>
                 </div>
 
-                <div className="container-fluid" style={{ padding: '30px' }}>
-                    {loading ? (
-                        <div style={{ textAlign: 'center', marginTop: '100px' }}>Đang tải...</div>
-                    ) : (
-                        <div className="dashboard-content">
-                            <div className="welcome-banner-modern">
-                                <div className="banner-text">
-                                    <h2>Xin chào Quản trị viên! 👋</h2>
-                                    <p>Hiện có <strong>{stats?.summary?.pendingExams || 0}</strong> bệnh nhân đang trong hàng đợi.</p>
-                                </div>
-                                <div className="banner-actions">
-                                    <button className="btn-primary-action" onClick={() => navigate('/hardware-simulator')}>Giả lập ca mới</button>
-                                </div>
-                            </div>
-
-                            <div className="stats-grid-dashboard">
-                                <div className="stat-card-d blue"><h3>Bệnh nhân</h3><div className="value">{stats?.summary?.totalPatients || 0}</div></div>
-                                <div className="stat-card-d green"><h3>Lượt chụp</h3><div className="value">{stats?.summary?.totalScans || 0}</div></div>
-                                <div className="stat-card-d red"><h3>Nguy cơ cao</h3><div className="value">{stats?.summary?.highRiskCases || 0}</div></div>
-                            </div>
-
-                            <div className="recent-section-card">
-                                <h3 className="section-heading">🕒 Hoạt động khám bệnh gần đây</h3>
-                                <div className="table-responsive">
-                                    <table className="modern-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Ngày thực hiện</th>
-                                                <th>Ảnh</th>
-                                                <th>Bệnh nhân</th>
-                                                <th>Phân tích AI</th>
-                                                <th>Hành động</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {stats?.recentActivity?.map((act: Examination) => (
-                                                <tr key={act.id}>
-                                                    <td>{formatDate(act.examDate)}</td>
-                                                    <td><img src={act.imageUrl} alt="scan" className="table-thumb-circle" width="40" height="40"/></td>
-                                                    <td><strong>{act.patientName || "Chưa xác định"}</strong></td>
-                                                    <td>{act.status}</td>
-                                                    <td>
-                                                        <button onClick={() => navigate(`/doctor/exam/${act.id}`)}>Chi tiết</button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                {/* 2. Khu vực Hoạt động gần đây */}
+                <div className="recent-section-card">
+                    <h3>🕒 Hoạt động gần đây (Dữ liệu thời gian thực)</h3>
+                    <table className="modern-table">
+                        <thead>
+                            <tr>
+                                <th>Ngày</th>
+                                <th>Bệnh nhân</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {stats?.recentActivity?.length > 0 ? (
+                                stats.recentActivity.map((act: any) => (
+                                    <tr key={act.id || act.Id}>
+                                        <td>{new Date(act.examDate || act.ExamDate).toLocaleDateString('vi-VN')}</td>
+                                        <td><strong>{act.patientName || act.PatientName}</strong></td>
+                                        <td>
+                                            <span className={`badge-status ${
+                                                (act.status || act.Status) === 'Verified' ? 'success' : 
+                                                (act.status || act.Status) === 'Analyzed' ? 'info' : 'warning'
+                                            }`}>
+                                                {act.status || act.Status}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {/* SỬA ĐƯỜNG DẪN: Đổi từ /clinic/examinations/ thành /clinic/exam/ để khớp với AppRoutes.tsx */}
+                                            <button 
+                                                className="btn-detail" 
+                                                onClick={() => navigate(`/clinic/exam/${act.id || act.Id}`)}
+                                            >
+                                                Xem Chi tiết
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={4} className="empty-row">Chưa có hoạt động nào trong hôm nay.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            </main>
+            </div>
         </div>
     );
 };
