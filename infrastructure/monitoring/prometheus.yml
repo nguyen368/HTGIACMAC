@@ -1,10 +1,47 @@
 global:
-  scrape_interval: 5s
+  scrape_interval: 5s # Quét dữ liệu mỗi 5 giây
 
 scrape_configs:
+  # 1. Giám sát chính Prometheus (tự giám sát)
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # --- Cấu hình giám sát các Microservices của AURA ---
+  # Lưu ý: Hostname phải trùng với "container_name" trong docker-compose.yml
+  # Port là 8080 (port nội bộ container), không phải port 50xx bên ngoài.
+
+  # 2. Identity Service
+  - job_name: 'identity_service'
+    static_configs:
+      - targets: ['identity-service:8080']
+
+  # 3. Medical Record Service
+  - job_name: 'medical_record_service'
+    static_configs:
+      - targets: ['medical-record-service:8080']
+
+  # 4. Imaging Service
+  - job_name: 'imaging_service'
+    static_configs:
+      - targets: ['imaging-service:8080']
+
+  # 5. Billing Service
+  - job_name: 'billing_service'
+    static_configs:
+      - targets: ['billing-service:8080']
+    
+  # 6. Gateway Service (Lưu ý: Tên container là aura-gateway)
+  - job_name: 'gateway_service'
+    static_configs:
+      - targets: ['aura-gateway:8080']
+
+  # 7. Notification Service
+  - job_name: 'notification_service'
+    static_configs:
+      - targets: ['notification-service:8080']
+
+  # 8. AI Core Service (Python chạy port 8000)
   - job_name: 'ai_core_service'
     static_configs:
       - targets: ['ai-core-service:8000']
-  - job_name: 'dotnet_services'
-    static_configs:
-      - targets: ['identity-service:8080', 'medical-record-service:8080']

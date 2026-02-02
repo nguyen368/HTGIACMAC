@@ -4,6 +4,7 @@ using AURA.Services.Imaging.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using MassTransit;
 using System.Text.Json;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,4 +86,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+app.UseHttpMetrics();
+app.MapMetrics();
 app.Run();

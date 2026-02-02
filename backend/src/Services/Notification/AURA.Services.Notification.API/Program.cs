@@ -3,6 +3,7 @@ using AURA.Services.Notification.API.Consumers;
 using AURA.Services.Notification.API.Hubs;
 using AURA.Shared.Messaging.Events; // Bổ sung để nhận diện Event dùng chung
 using Microsoft.AspNetCore.SignalR;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -76,7 +77,7 @@ app.UseAuthorization();
 // --- 5. ĐĂNG KÝ ROUTE ---
 // Map đường dẫn cho Hub SignalR - Frontend sẽ kết nối vào link này
 app.MapHub<NotificationHub>("/hubs/notifications");
-
+app.UseHttpMetrics();
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();

@@ -2,6 +2,7 @@ using AURA.Services.Billing.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using MassTransit; // Thêm namespace
 using AURA.Services.Billing.API.Consumers; // Thêm namespace Consumer
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,10 +75,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseHttpMetrics();
 app.UseHttpsRedirection();
 //Kích hoạt CORS
 app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();
