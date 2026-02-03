@@ -3,7 +3,12 @@
     {
       "DownstreamPathTemplate": "/api/auth/{everything}",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "identity-service", "Port": 8080 } ],
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "identity-service",
+          "Port": 8080
+        }
+      ],
       "UpstreamPathTemplate": "/api/auth/{everything}",
       "UpstreamHttpMethod": [ "POST", "GET", "PUT", "OPTIONS" ],
       "Priority": 10
@@ -11,7 +16,12 @@
     {
       "DownstreamPathTemplate": "/api/patients/{everything}",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "medical-record-service", "Port": 8080 } ],
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "medical-record-service",
+          "Port": 8080
+        }
+      ],
       "UpstreamPathTemplate": "/api/patients/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ],
       "Priority": 15
@@ -19,7 +29,12 @@
     {
       "DownstreamPathTemplate": "/api/medical-records/examinations/stats",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "medical-record-service", "Port": 8080 } ],
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "medical-record-service",
+          "Port": 8080
+        }
+      ],
       "UpstreamPathTemplate": "/api/medical-records/examinations/stats",
       "UpstreamHttpMethod": [ "GET", "OPTIONS" ],
       "Priority": 30
@@ -27,7 +42,12 @@
     {
       "DownstreamPathTemplate": "/api/medical-records/{everything}",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "medical-record-service", "Port": 8080 } ],
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "medical-record-service",
+          "Port": 8080
+        }
+      ],
       "UpstreamPathTemplate": "/api/medical-records/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ],
       "Priority": 5
@@ -35,7 +55,12 @@
     {
       "DownstreamPathTemplate": "/api/imaging/{everything}",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "imaging-service", "Port": 8080 } ],
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "imaging-service",
+          "Port": 8080
+        }
+      ],
       "UpstreamPathTemplate": "/api/imaging/{everything}",
       "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ],
       "Priority": 10
@@ -51,16 +76,30 @@
     {
       "DownstreamPathTemplate": "/hubs/notifications/{everything}",
       "DownstreamScheme": "ws",
-      "DownstreamHostAndPorts": [ { "Host": "notification-service", "Port": 8080 } ],
-      "UpstreamPathTemplate": "/api/hubs/notifications/{everything}"
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "notification-service",
+          "Port": 8080
+        }
+      ],
+      "UpstreamPathTemplate": "/api/hubs/notifications/{everything}",
+      "Priority": 20
     },
     {
       "DownstreamPathTemplate": "/hubs/notifications/negotiate",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "notification-service", "Port": 8080 } ],
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "notification-service",
+          "Port": 8080
+        }
+      ],
       "UpstreamPathTemplate": "/api/hubs/notifications/negotiate",
-      "UpstreamHttpMethod": [ "POST", "OPTIONS" ]
+      "UpstreamHttpMethod": [ "POST", "OPTIONS" ],
+      "Priority": 20
     }
   ],
-  "GlobalConfiguration": { "BaseUrl": "http://localhost" }
+  "GlobalConfiguration": {
+    "BaseUrl": "http://localhost"
+  }
 }

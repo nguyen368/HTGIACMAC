@@ -8,6 +8,7 @@ using AURA.Services.MedicalRecord.Application.DTOs;
 using AURA.Services.MedicalRecord.Application.Validators;
 using Microsoft.IdentityModel.Tokens; // [BẮT BUỘC] Thêm dòng này để dùng SymmetricSecurityKey
 using System.Text; // [BẮT BUỘC] Thêm dòng này để dùng Encoding
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -83,6 +84,7 @@ using (var scope = app.Services.CreateScope())
     dbContext.Database.Migrate();
 }
 
+app.UseHttpMetrics();
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -90,5 +92,5 @@ app.UseAuthentication(); // Xác thực (Kiểm tra Token)
 app.UseAuthorization();  // Phân quyền (Kiểm tra Role)
 
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();

@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using MassTransit;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -135,9 +136,10 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseHttpMetrics();
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();
