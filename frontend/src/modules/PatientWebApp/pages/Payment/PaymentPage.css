@@ -1,0 +1,41 @@
+.package-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-top: 15px;
+}
+.package-card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    text-align: center;
+    transition: transform 0.2s;
+}
+.package-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0,0,0,0.05); }
+.pkg-name { font-weight: bold; font-size: 1.1rem; color: #2d3748; }
+.pkg-price { font-size: 1.5rem; color: #0ea5e9; font-weight: 800; margin: 10px 0; }
+.pkg-desc { font-size: 0.9rem; color: #718096; margin-bottom: 15px; }
+.buy-btn {
+    background: #0ea5e9; color: white; border: none; padding: 10px 20px;
+    border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold;
+}
+.buy-btn:hover { background: #0284c7; }
+
+/* Bill List Styles */
+.bill-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: white; padding: 15px; margin-bottom: 10px;
+    border-radius: 8px; border-left: 4px solid #cbd5e0;
+}
+.bill-item.Paid { border-left-color: #48bb78; }
+.bill-item.Pending { border-left-color: #ecc94b; }
+
+.status-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
+.status-badge.Paid { background: #f0fff4; color: #2f855a; }
+.status-badge.Pending { background: #fffff0; color: #b7791f; }
+
+.pay-now-btn {
+    margin-left: 10px; background: #ed8936; color: white; border: none;
+    padding: 6px 12px; border-radius: 4px; cursor: pointer;
+}

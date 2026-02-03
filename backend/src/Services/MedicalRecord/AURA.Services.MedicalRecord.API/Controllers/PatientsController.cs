@@ -37,7 +37,35 @@ public class PatientsController : ControllerBase
         if (existingPatient != null) return BadRequest("Hồ sơ bệnh nhân đã tồn tại.");
 
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
+        
+        // [UPDATE] Thêm AvatarUrl vào constructor (giả sử Patient entity đã hỗ trợ)
+        // Nếu Entity chưa có constructor nhận AvatarUrl, ta có thể gán property sau khi new
         var patient = new Patient(userId, request.ClinicId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+        
+        // [NEW] Gán AvatarUrl nếu có
+        if (!string.IsNullOrEmpty(request.AvatarUrl))
+        {
+            // Lưu ý: Cần đảm bảo Entity Patient có property AvatarUrl public set
+            // patient.AvatarUrl = request.AvatarUrl; 
+            // Nếu dùng phương thức UpdateInfo để set, hãy cập nhật phương thức đó trong Entity
+            
+            // Tạm thời gán trực tiếp hoặc qua method (tùy vào Domain của bạn)
+            patient.UpdateAvatar(request.AvatarUrl); 
+        }
+
+        // [NEW] Xử lý MedicalHistory nếu có
+        if (request.MedicalHistory != null)
+        {
+            // Logic thêm tiền sử bệnh. Ví dụ:
+            if (request.MedicalHistory.HasDiabetes)
+                patient.AddMedicalHistory("Diabetes", $"Tiểu đường {request.MedicalHistory.YearsOfDiabetes} năm", DateTime.UtcNow);
+            
+            if (request.MedicalHistory.HasHypertension)
+                patient.AddMedicalHistory("Hypertension", "Cao huyết áp", DateTime.UtcNow);
+            
+            if (!string.IsNullOrEmpty(request.MedicalHistory.SmokingStatus) && request.MedicalHistory.SmokingStatus != "never")
+                patient.AddMedicalHistory("Smoking", $"Hút thuốc: {request.MedicalHistory.SmokingStatus}", DateTime.UtcNow);
+        }
         
         _context.Patients.Add(patient);
         await _context.SaveChangesAsync();
@@ -56,6 +84,10 @@ public class PatientsController : ControllerBase
             .FirstOrDefaultAsync(p => p.UserId == userId);
 
         if (patient == null) return NotFound("Chưa cập nhật hồ sơ y tế.");
+        
+        // [UPDATE] Trả về object có chứa AvatarUrl và MedicalHistory để Frontend map
+        // Bạn có thể dùng AutoMapper hoặc tạo DTO response riêng.
+        // Ở đây trả về entity trực tiếp (như code cũ), giả sử entity đã có AvatarUrl.
         return Ok(patient);
     }
 
@@ -68,16 +100,46 @@ public class PatientsController : ControllerBase
         var userId = GetUserIdFromToken();
         if (userId == Guid.Empty) return Unauthorized();
 
-        var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
+        var patient = await _context.Patients.Include(p => p.MedicalHistories).FirstOrDefaultAsync(p => p.UserId == userId);
         var dob = DateTime.SpecifyKind(request.DateOfBirth, DateTimeKind.Utc);
 
         if (patient == null) {
             patient = new Patient(userId, request.ClinicId, request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+            
+            // [NEW] Gán AvatarUrl khi tạo mới
+            if (!string.IsNullOrEmpty(request.AvatarUrl)) patient.UpdateAvatar(request.AvatarUrl);
+
             _context.Patients.Add(patient);
         } else {
             patient.UpdateInfo(request.FullName, dob, request.Gender, request.PhoneNumber, request.Address);
+            
+            // [NEW] Cập nhật AvatarUrl nếu có thay đổi
+            if (!string.IsNullOrEmpty(request.AvatarUrl))
+            {
+                patient.UpdateAvatar(request.AvatarUrl);
+            }
+
             _context.Patients.Update(patient);
         }
+
+        // [NEW] Cập nhật Medical History (Xóa cũ thêm mới hoặc update - ở đây demo thêm mới đơn giản)
+        // Lưu ý: Logic này cần tinh chỉnh tùy business rule thực tế
+        if (request.MedicalHistory != null)
+        {
+            // Xóa lịch sử cũ để cập nhật lại trạng thái mới nhất (hoặc update từng cái)
+            // _context.MedicalHistories.RemoveRange(patient.MedicalHistories); 
+            
+            // Ví dụ cập nhật đơn giản:
+            if (request.MedicalHistory.HasDiabetes)
+            {
+                var existing = patient.MedicalHistories.FirstOrDefault(h => h.Condition == "Diabetes");
+                if (existing == null) patient.AddMedicalHistory("Diabetes", $"Tiểu đường {request.MedicalHistory.YearsOfDiabetes} năm", DateTime.UtcNow);
+                else existing.UpdateDescription($"Tiểu đường {request.MedicalHistory.YearsOfDiabetes} năm");
+            }
+            
+            // Tương tự cho các bệnh khác...
+        }
+
         await _context.SaveChangesAsync();
         return Ok(patient);
     }

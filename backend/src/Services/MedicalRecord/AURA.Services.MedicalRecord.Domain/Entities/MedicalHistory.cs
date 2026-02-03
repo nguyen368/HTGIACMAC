@@ -19,4 +19,10 @@ public class MedicalHistory : Entity
         Description = description;
         DiagnosedDate = diagnosedDate;
     }
+
+    // [MỚI] Phương thức hỗ trợ cập nhật mô tả (được gọi từ Controller)
+    public void UpdateDescription(string description)
+    {
+        Description = description;
+    }
 }

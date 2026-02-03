@@ -16,6 +16,8 @@ const PatientLayout: React.FC = () => {
         if (path.includes('upload')) setActiveTab('upload');
         else if (path.includes('history')) setActiveTab('history');
         else if (path.includes('profile')) setActiveTab('profile');
+        // [MỚI] Thêm logic check cho tab thanh toán
+        else if (path.includes('payment')) setActiveTab('payment');
         else setActiveTab('home');
     }, [location.pathname]);
 
@@ -51,6 +53,9 @@ const PatientLayout: React.FC = () => {
                         <button className={`nav-item ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => handleTabClick('upload')}>Sàng lọc AI</button>
                         <button className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => handleTabClick('history')}>Lịch sử</button>
                         <button className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => handleTabClick('profile')}>Hồ sơ</button>
+                        
+                        {/* [MỚI] Nút Thanh toán được thêm vào cuối danh sách */}
+                        <button className={`nav-item ${activeTab === 'payment' ? 'active' : ''}`} onClick={() => handleTabClick('payment')}>Thanh toán</button>
                     </div>
 
                     <div className="tab-content-render animate-fade-in">

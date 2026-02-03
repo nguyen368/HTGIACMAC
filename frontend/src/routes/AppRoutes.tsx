@@ -12,11 +12,17 @@ import ExaminationQueue from '../modules/ClinicWebApp/pages/Doctor/ExaminationQu
 import ClinicUploadPage from '../modules/ClinicWebApp/pages/Upload/ClinicUploadPage';
 import ClinicExamDetail from '../modules/ClinicWebApp/pages/Exam/ClinicExamDetail';
 import HardwareSimulator from '../modules/ClinicWebApp/pages/Upload/HardwareSimulator';
+
+// Import Patient Pages
 import PatientLayout from '../modules/PatientWebApp/pages/Dashboard/PatientLayout';
 import PatientHome from '../modules/PatientWebApp/pages/Dashboard/PatientHome';
 import PatientProfile from '../modules/PatientWebApp/pages/Dashboard/PatientProfile';
 import PatientHistory from '../modules/PatientWebApp/pages/Dashboard/PatientHistory';
 import PatientUpload from '../modules/PatientWebApp/pages/Dashboard/PatientUpload';
+// [MỚI - Đã có] Import trang chi tiết khám cho bệnh nhân
+import PatientExamDetail from '../modules/PatientWebApp/pages/Dashboard/PatientExamDetail';
+// [MỚI - Bổ sung] Import trang Thanh toán
+import PaymentPage from '../modules/PatientWebApp/pages/Payment/PaymentPage';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: JSX.Element, allowedRoles: string[] }) => {
     const token = localStorage.getItem('aura_token');
@@ -60,10 +66,16 @@ const AppRoutes: React.FC = () => {
             {/* PHÂN HỆ BỆNH NHÂN */}
             <Route path="/patient" element={<ProtectedRoute allowedRoles={['Patient']}><PatientLayout /></ProtectedRoute>}>
                 <Route index element={<PatientHome user={user} setTab={() => {}} />} />
-                <Route path="dashboard" element={<PatientHome user={user} setTab={() => {}} />} /> {/* Thêm dòng này */}
+                <Route path="dashboard" element={<PatientHome user={user} setTab={() => {}} />} /> 
                 <Route path="profile" element={<PatientProfile />} />
                 <Route path="history" element={<PatientHistory />} />
                 <Route path="upload" element={<PatientUpload onUploadSuccess={() => {}} />} />
+                
+                {/* [Đã có] Route xem chi tiết kết quả khám & Tải PDF */}
+                <Route path="exam/:id" element={<PatientExamDetail />} />
+
+                {/* [MỚI - Bổ sung] Route Thanh toán & Mua gói */}
+                <Route path="payment" element={<PaymentPage />} />
             </Route>
 
             <Route path="/hardware-simulator" element={<HardwareSimulator />} />

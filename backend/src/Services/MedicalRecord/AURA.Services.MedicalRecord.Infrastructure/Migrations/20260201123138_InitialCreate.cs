@@ -16,14 +16,15 @@ namespace AURA.Services.MedicalRecord.Infrastructure.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ClinicId = table.Column<Guid>(type: "uuid", nullable: false),
                     FullName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    Email = table.Column<string>(type: "text", nullable: false),
-                    PhoneNumber = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Email = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
                     DateOfBirth = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Gender = table.Column<string>(type: "text", nullable: false),
-                    Address = table.Column<string>(type: "text", nullable: false),
-                    ClinicId = table.Column<Guid>(type: "uuid", nullable: false),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false)
+                    PhoneNumber = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Address = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    AvatarUrl = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -36,18 +37,21 @@ namespace AURA.Services.MedicalRecord.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     PatientId = table.Column<Guid>(type: "uuid", nullable: false),
-                    DoctorId = table.Column<Guid>(type: "uuid", nullable: true),
                     ClinicId = table.Column<Guid>(type: "uuid", nullable: false),
+                    DoctorId = table.Column<Guid>(type: "uuid", nullable: true),
                     ImageId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ImageUrl = table.Column<string>(type: "text", nullable: false),
                     ExamDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Diagnosis = table.Column<string>(type: "text", nullable: false),
                     DoctorNotes = table.Column<string>(type: "text", nullable: false),
+                    ImageUrl = table.Column<string>(type: "text", nullable: false),
                     Status = table.Column<string>(type: "text", nullable: false),
-                    AiDiagnosis = table.Column<string>(type: "text", nullable: true),
                     AiRiskScore = table.Column<double>(type: "double precision", nullable: true),
                     AiRiskLevel = table.Column<string>(type: "text", nullable: true),
-                    HeatmapUrl = table.Column<string>(type: "text", nullable: true)
+                    HeatmapUrl = table.Column<string>(type: "text", nullable: true),
+                    AiDiagnosis = table.Column<string>(type: "text", nullable: true),
+                    PredictionResult = table.Column<string>(type: "text", nullable: false),
+                    ConfidenceScore = table.Column<double>(type: "double precision", nullable: false),
+                    DiagnosisResult = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -57,7 +61,7 @@ namespace AURA.Services.MedicalRecord.Infrastructure.Migrations
                         column: x => x.PatientId,
                         principalTable: "Patients",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -98,11 +102,17 @@ namespace AURA.Services.MedicalRecord.Infrastructure.Migrations
                 unique: true);
         }
 
+        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(name: "Examinations");
-            migrationBuilder.DropTable(name: "MedicalHistories");
-            migrationBuilder.DropTable(name: "Patients");
+            migrationBuilder.DropTable(
+                name: "Examinations");
+
+            migrationBuilder.DropTable(
+                name: "MedicalHistories");
+
+            migrationBuilder.DropTable(
+                name: "Patients");
         }
     }
 }
