@@ -18,7 +18,8 @@ namespace AURA.Services.MedicalRecord.API.Controllers
     }
 
     // Record này dùng để gửi tin nhắn sang dịch vụ Notification để cập nhật Dashboard real-time
-    public record AnalysisCompletedEvent(Guid ExaminationId, Guid ClinicId, Guid PatientId, string RiskLevel, double RiskScore);
+    // [CẬP NHẬT]: Bổ sung thêm Diagnosis và HeatmapUrl vào sự kiện để Notification Hub có đủ dữ liệu hiển thị ngay
+    public record AnalysisCompletedEvent(Guid ExaminationId, Guid ClinicId, Guid PatientId, string RiskLevel, double RiskScore, string Diagnosis, string HeatmapUrl);
 
     [ApiController]
     [Route("api/medical-records/examinations")]
@@ -47,6 +48,7 @@ namespace AURA.Services.MedicalRecord.API.Controllers
 
             if (!finalClinicId.HasValue) return BadRequest("Không xác định được phòng khám.");
 
+            // Lọc trực tiếp trên bảng Examinations để đảm bảo tính chính xác
             var query = _context.Examinations.Where(e => e.ClinicId == finalClinicId.Value);
 
             return Ok(new { 
@@ -59,10 +61,10 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 RecentActivity = await query
                     .Include(e => e.Patient)
                     .OrderByDescending(e => e.ExamDate)
-                    .Take(5) // Lấy 5 hoạt động mới nhất
+                    .Take(5) 
                     .Select(e => new {
                         Id = e.Id,
-                        PatientName = e.Patient != null ? e.Patient.FullName : "Unknown",
+                        PatientName = e.Patient != null ? e.Patient.FullName : "Khách vãng lai",
                         Status = e.Status,
                         ExamDate = e.ExamDate
                     }).ToListAsync()
@@ -75,7 +77,11 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         {
             if (request.PatientId == Guid.Empty) return BadRequest("PatientId is required");
 
-            // TÌM KIẾM THÔNG MINH: Tìm theo cả PK (Id) và UserId của bệnh nhân để tránh lỗi lệch ID
+            // [KIỂM TRA TRÙNG LẶP]: Tránh hiện 2 kết quả khác nhau do tạo 2 bản ghi cho cùng 1 ảnh
+            var existingExam = await _context.Examinations.FirstOrDefaultAsync(e => e.ImageId == request.ImageId);
+            if (existingExam != null) return Ok(new { Message = "Ca khám đã tồn tại", Id = existingExam.Id });
+
+            // TÌM KIẾM THÔNG MINH: Tìm theo cả PK (Id) và UserId của bệnh nhân
             var patient = await _context.Patients
                 .FirstOrDefaultAsync(p => p.Id == request.PatientId || p.UserId == request.PatientId);
 
@@ -83,16 +89,19 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 return BadRequest($"Không tìm thấy hồ sơ bệnh nhân cho ID: {request.PatientId}");
             }
 
+            // [QUAN TRỌNG]: Lấy ClinicId trực tiếp từ hồ sơ bệnh nhân trong DB để tránh bị ClinicId rỗng
             var examination = new Examination(
-                patient.Id, 
                 request.ImageId, 
-                request.Diagnosis ?? "Chờ AI phân tích", 
-                request.DoctorNotes ?? "Hệ thống khởi tạo tự động", 
-                request.DoctorId
+                patient.Id, 
+                patient.ClinicId, // ClinicId chính xác từ DB
+                request.ImageUrl ?? "", 
+                DateTime.UtcNow
             );
             
-            examination.ClinicId = patient.ClinicId;
-            examination.ImageUrl = request.ImageUrl ?? ""; // Lưu URL ảnh để hiển thị ngay trên Dashboard
+            // Gán các giá trị mặc định cho ca khám mới
+            examination.Diagnosis = request.Diagnosis ?? "Chờ AI phân tích";
+            examination.DoctorNotes = request.DoctorNotes ?? "Hệ thống khởi tạo tự động";
+            examination.DoctorId = request.DoctorId;
 
             _context.Examinations.Add(examination);
             await _context.SaveChangesAsync();
@@ -104,16 +113,20 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         [HttpPut("ai-update/{imageId}")]
         public async Task<IActionResult> UpdateAiResult(Guid imageId, [FromBody] AiResultRequest request)
         {
-            var exam = await _context.Examinations.FirstOrDefaultAsync(e => e.ImageId == imageId);
+            // Tìm theo cả ImageId hoặc Id để chắc chắn khớp bản ghi
+            var exam = await _context.Examinations.FirstOrDefaultAsync(e => e.ImageId == imageId || e.Id == imageId);
             if (exam == null) return NotFound();
 
-            // Cập nhật kết quả AI vào Database (Sử dụng DTO giúp gán chính xác các trường dữ liệu)
-            exam.AiDiagnosis = request.PredictionResult;
-            exam.AiRiskScore = request.ConfidenceScore;
+            // [FIX LỖI 4500%]: Chuẩn hóa điểm tin cậy/rủi ro về khoảng 0.0 - 1.0
+            double normalizedScore = request.ConfidenceScore > 1 ? request.ConfidenceScore / 100 : request.ConfidenceScore;
+
+            // [FIX LỖI MẤT KẾT QUẢ]: Gán kết quả chẩn đoán AI vào trường AiDiagnosis
+            exam.AiDiagnosis = string.IsNullOrEmpty(request.PredictionResult) ? "Không phát hiện bất thường" : request.PredictionResult;
+            exam.AiRiskScore = normalizedScore;
             exam.AiRiskLevel = request.RiskLevel;
             exam.HeatmapUrl = request.HeatmapUrl;
 
-            // Logic trạng thái sinh học: Nếu AI từ chối (do không phải võng mạc), đặt trạng thái Rejected
+            // Logic trạng thái: Nếu AI từ chối (do không phải võng mạc), đặt trạng thái Rejected
             if (request.RiskLevel == "Rejected") {
                 exam.Status = "Rejected";
             } else {
@@ -122,24 +135,24 @@ namespace AURA.Services.MedicalRecord.API.Controllers
 
             await _context.SaveChangesAsync();
 
-            // PHÁT TÁN SỰ KIỆN: Để Notification Service gửi SignalR cập nhật Dashboard bác sĩ ngay lập tức
+            // PHÁT TÁN SỰ KIỆN: Gửi đầy đủ kết quả để Dashboard bác sĩ cập nhật ngay mà không cần nhấn F5
             await _publishEndpoint.Publish(new AnalysisCompletedEvent(
                 exam.Id, 
                 exam.ClinicId, 
                 exam.PatientId, 
                 exam.AiRiskLevel ?? "Low", 
-                exam.AiRiskScore ?? 0
+                normalizedScore,
+                exam.AiDiagnosis,
+                exam.HeatmapUrl ?? ""
             ));
 
             return Ok();
         }
 
         // --- 4. LẤY CHI TIẾT CA KHÁM (Cung cấp dữ liệu cho Xem chi tiết & PDF) ---
-        // ĐÃ SỬA: Hỗ trợ tìm kiếm bằng cả ID Ca khám hoặc ID Hình ảnh (Fix lỗi Gallery)
         [HttpGet("{id}")]
         public async Task<IActionResult> GetExaminationById(Guid id)
         {
-            // SỬA Ở ĐÂY: Thêm điều kiện || e.ImageId == id
             var exam = await _context.Examinations
                 .Include(e => e.Patient)
                 .FirstOrDefaultAsync(e => e.Id == id || e.ImageId == id);
@@ -151,7 +164,6 @@ namespace AURA.Services.MedicalRecord.API.Controllers
             return Ok(new {
                 exam.Id, 
                 exam.PatientId,
-                // Trả về ImageId để Frontend có thể đối chiếu nếu cần
                 exam.ImageId, 
                 PatientName = exam.Patient?.FullName ?? "Unknown",
                 Age = age, 
@@ -160,8 +172,8 @@ namespace AURA.Services.MedicalRecord.API.Controllers
                 exam.Status, 
                 exam.ExamDate, 
                 exam.DoctorNotes,
-                // Ưu tiên hiển thị chẩn đoán cuối của bác sĩ nếu ca khám đã hoàn tất (Verified)
-                DiagnosisResult = exam.Status == "Verified" ? exam.Diagnosis : (exam.AiDiagnosis ?? exam.Diagnosis),
+                // [THỐNG NHẤT KẾT QUẢ]: Ưu tiên kết quả bác sĩ (nếu có), nếu không lấy kết quả AI
+                DiagnosisResult = exam.Status == "Verified" ? exam.Diagnosis : (exam.AiDiagnosis ?? "Đang phân tích..."),
                 AiRiskScore = exam.AiRiskScore ?? 0,
                 exam.AiRiskLevel, 
                 exam.HeatmapUrl
@@ -172,24 +184,38 @@ namespace AURA.Services.MedicalRecord.API.Controllers
         [HttpGet("queue")]
         public async Task<IActionResult> GetExaminationQueue([FromQuery] Guid? clinicId, [FromQuery] string? searchTerm)
         {
-            var query = _context.Examinations.Include(e => e.Patient)
-                .Where(e => e.Status == "Pending" || e.Status == "Analyzed")
-                .AsNoTracking();
+            // Tự động xác định ClinicId của bác sĩ đang đăng nhập nếu không truyền vào query
+            var searchClinicId = clinicId;
+            if (!searchClinicId.HasValue || searchClinicId == Guid.Empty)
+            {
+                var clinicClaim = User.FindFirst("ClinicId")?.Value ?? User.FindFirst("clinic_id")?.Value;
+                if (Guid.TryParse(clinicClaim, out var parsedId)) searchClinicId = parsedId;
+            }
 
-            if (clinicId.HasValue) 
-                query = query.Where(e => e.Patient != null && e.Patient.ClinicId == clinicId.Value);
-            
+            var query = _context.Examinations.Include(e => e.Patient).AsQueryable();
+
+            // [QUAN TRỌNG]: Lọc trực tiếp bằng ClinicId lưu trong ca khám để đảm bảo dữ liệu hiện ra trang Clinic
+            if (searchClinicId.HasValue && searchClinicId != Guid.Empty)
+            {
+                query = query.Where(e => e.ClinicId == searchClinicId.Value);
+            }
+
+            // Chỉ lấy các ca đang chờ hoặc đã phân tích xong
+            query = query.Where(e => e.Status == "Pending" || e.Status == "Analyzed");
+
             if (!string.IsNullOrEmpty(searchTerm)) 
-                query = query.Where(e => e.Patient.FullName.Contains(searchTerm));
+                query = query.Where(e => e.Patient != null && e.Patient.FullName.Contains(searchTerm));
 
-            var results = await query.OrderByDescending(e => e.AiRiskScore).ThenBy(e => e.ExamDate)
+            var results = await query.OrderByDescending(e => e.ExamDate)
                 .Select(e => new ExaminationQueueDto {
                     Id = e.Id, 
                     PatientId = e.PatientId, 
-                    PatientName = e.Patient != null ? e.Patient.FullName : "Unknown",
+                    // Nếu thông tin bệnh nhân bị lỗi, hiện "Khách vãng lai" để vẫn xem được hồ sơ
+                    PatientName = e.Patient != null ? e.Patient.FullName : "Khách vãng lai",
                     ImageUrl = e.ImageUrl, 
                     ExamDate = e.ExamDate, 
                     Status = e.Status,
+                    // Đồng bộ chẩn đoán hiển thị trong danh sách (Sử dụng kết quả AI)
                     AiDiagnosis = e.AiDiagnosis ?? "Đang chờ AI...", 
                     AiRiskLevel = e.AiRiskLevel ?? "Low", 
                     AiRiskScore = e.AiRiskScore ?? 0

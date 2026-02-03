@@ -66,6 +66,14 @@
       "Priority": 10
     },
     {
+      "DownstreamPathTemplate": "/api/bills/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "billing-service", "Port": 8080 } ],
+      "UpstreamPathTemplate": "/api/bills/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE", "OPTIONS" ],
+      "Priority": 10
+    },
+    {
       "DownstreamPathTemplate": "/hubs/notifications/{everything}",
       "DownstreamScheme": "ws",
       "DownstreamHostAndPorts": [

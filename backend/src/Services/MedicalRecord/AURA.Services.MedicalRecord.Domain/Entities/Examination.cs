@@ -1,12 +1,13 @@
 using AURA.Services.MedicalRecord.Domain.States;
 using AURA.Shared.Kernel.Primitives;
+using System;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AURA.Services.MedicalRecord.Domain.Entities
 {
     public class Examination : Entity
     {
-        // Chuyển sang public set để cho phép gán dữ liệu từ Controller/Imaging Service
+        // --- CÁC THUỘC TÍNH (GIỮ NGUYÊN VÀ MỞ KHÓA SET) ---
         public Guid PatientId { get; set; } 
         public Guid ClinicId { get; set; }
         public Guid? DoctorId { get; set; }
@@ -16,7 +17,6 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
         public string Diagnosis { get; set; } = string.Empty;
         public string DoctorNotes { get; set; } = string.Empty;
         
-        // Mở khóa set để dứt điểm lỗi CS0272
         public string ImageUrl { get; set; } = string.Empty;
         public string Status { get; set; } = "Pending"; 
 
@@ -25,14 +25,42 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
         public string? HeatmapUrl { get; set; }
         public string? AiDiagnosis { get; set; }
 
+        // Các trường bổ trợ để đồng bộ với logic Controller/Frontend
+        public string PredictionResult { get; set; } = string.Empty;
+        public double ConfidenceScore { get; set; }
+        public string DiagnosisResult { get; set; } = string.Empty;
+
         public virtual Patient? Patient { get; set; }
 
         [NotMapped]
         private ExaminationState _state = new PendingState();
 
+        // --- CÁC CONSTRUCTOR ---
+
         public Examination() { }
 
-        // Giữ nguyên Constructor 1 của bạn
+        // [MỚI]: Constructor 5 tham số để Fix lỗi CS1729 và logic Consumer
+        // Nhận ID (từ ImageId), PatientId, ClinicId, ImageUrl, Date
+        public Examination(Guid id, Guid patientId, Guid clinicId, string imageUrl, DateTime examDate)
+        {
+            Id = id; // Gán ID từ ImageId truyền vào
+            PatientId = patientId;
+            ClinicId = clinicId;
+            ImageId = id; // Map luôn ImageId = Id để nhất quán
+            ImageUrl = imageUrl ?? string.Empty;
+            ExamDate = examDate;
+            
+            // Giá trị mặc định ban đầu
+            Status = "Pending";
+            AiDiagnosis = "Processing...";
+            AiRiskLevel = "Unknown";
+            Diagnosis = "";
+            DoctorNotes = "";
+            
+            TransitionTo(new PendingState());
+        }
+
+        // Constructor cũ 1 của bạn
         public Examination(Guid patientId, Guid imageId, string diagnosis, string notes, Guid doctorId)
         {
             Id = Guid.NewGuid();
@@ -48,7 +76,7 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
             else TransitionTo(new PendingState());
         }
 
-        // Giữ nguyên Constructor 2 của bạn
+        // Constructor cũ 2 của bạn
         public Examination(Guid patientId, string imageUrl)
         {
             Id = Guid.NewGuid();
@@ -60,7 +88,7 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
             TransitionTo(new PendingState());
         }
 
-        // --- GIỮ NGUYÊN TOÀN BỘ LOGIC NGHIỆP VỤ (STATE PATTERN) CỦA BẠN ---
+        // --- CÁC LOGIC NGHIỆP VỤ STATE PATTERN (GIỮ NGUYÊN TOÀN BỘ) ---
 
         public void TransitionTo(ExaminationState newState)
         {
@@ -88,6 +116,11 @@ namespace AURA.Services.MedicalRecord.Domain.Entities
             this.AiDiagnosis = diagnosis;
             this.AiRiskScore = score;
             this.HeatmapUrl = heatmapUrl;
+            
+            // Đồng bộ thêm vào các trường Prediction để Controller dùng được
+            this.PredictionResult = diagnosis;
+            this.ConfidenceScore = score;
+
             if (_state == null) LoadState();
             _state.ProcessAiResult(this, diagnosis);
         }

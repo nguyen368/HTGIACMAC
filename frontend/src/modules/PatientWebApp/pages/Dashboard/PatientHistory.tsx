@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+// Import hook chuyển trang
+import { useNavigate } from 'react-router-dom';
 // @ts-ignore
 import imagingApi from '../../../../api/imagingApi';
 // @ts-ignore
@@ -9,6 +11,8 @@ import '../Dashboard/PatientHome.css';
 
 const PatientHistory: React.FC = () => {
     const { user } = useAuth();
+    // Khởi tạo navigate
+    const navigate = useNavigate();
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -24,22 +28,10 @@ const PatientHistory: React.FC = () => {
         }
     }, [user]);
 
-    // [ĐÃ SỬA] Hàm hiển thị chi tiết (Không gọi API Medical nữa để tránh lỗi)
+    // [ĐÃ SỬA] Thay thế alert bằng chuyển trang sang chi tiết
     const handleViewReport = (item: any) => {
-        // Lấy dữ liệu ngay tại dòng đó
-        const diagnosis = item.predictionResult || item.PredictionResult || "Đang xử lý";
-        const score = item.confidenceScore || item.ConfidenceScore || "N/A";
-        const dateStr = item.createdAt || item.uploadedAt || new Date().toISOString();
-        const date = new Date(dateStr).toLocaleString('vi-VN');
-
-        alert(
-            `📊 KẾT QUẢ SƠ BỘ TỪ AI:\n` +
-            `--------------------------\n` +
-            `🕒 Ngày chụp: ${date}\n` +
-            `🩺 Chẩn đoán: ${diagnosis}\n` +
-            `🎯 Độ tin cậy: ${score}%\n\n` +
-            `*Vui lòng chờ bác sĩ xác nhận cuối cùng.`
-        );
+        // Chuyển hướng sang trang chi tiết (Trang có hộp Debug)
+        navigate(`/patient/exam/${item.id}`);
     };
 
     return (
